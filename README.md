@@ -1,8 +1,19 @@
 # Honor of Kings Skin Trivia
 
-A fun little trivia web app for guessing heroes and skins from splash art. Test your knowledge or just enjoy the artwork.
+A fun little trivia web app for guessing heroes and skins from splash art. Test your knowledge or just enjoy the artwork. Play the game here: https://hoktrivia.netlify.app/
 
-## Current capabilities
+## Visuals: Game/Gallery Mode
+### Trivia Mode Home Page
+<img width="1919" height="945" alt="image" src="https://github.com/user-attachments/assets/3487045f-3262-4fee-952b-46c3264a19ec" />
+
+### Trivia Mode Game Page
+<img width="1903" height="935" alt="image" src="https://github.com/user-attachments/assets/8a973b17-1804-4044-80a5-d55b0b05a06e" />
+
+### Gallery Mode
+<img width="1903" height="937" alt="image" src="https://github.com/user-attachments/assets/2dfa3db3-1fed-4472-be70-0d57afcffe86" />
+
+
+## Current Features
 
 - Question target modes:
   - Guess Hero Name
