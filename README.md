@@ -1,8 +1,12 @@
 # Honor of Kings Skin Trivia
 
-Trivia web app prototype for guessing heroes and skins from splash art.
+Trivia web app for guessing heroes and skins from splash art.
 
-## Implemented in this first pass
+## Project status
+
+This repository is the technical starting point for the app and has not been deployed yet.
+
+## Current capabilities
 
 - Question target modes:
   - Guess Hero Name
@@ -40,7 +44,7 @@ npm run build
 
 ## Real data ingestion workflow
 
-This project now supports a real-data pipeline from exported network capture to app-ready TypeScript data.
+This project includes a real-data pipeline from exported network capture to app-ready TypeScript data.
 
 1. Export a capture file from browser devtools on the official skin page.
 2. Save as either:
@@ -66,11 +70,11 @@ Output files:
 - data/processed/meta.json
 - src/data/skins.generated.ts
 
-At runtime, src/data/skins.ts will automatically use generated data when available and fall back to the starter seed dataset otherwise.
+At runtime, src/data/skins.ts automatically uses generated data when available and falls back to the starter seed dataset otherwise.
 
 ## Data model
 
-Current seed dataset is in src/data/skins.ts with this shape:
+The dataset shape used by the app is:
 
 - id
 - heroId
@@ -80,12 +84,3 @@ Current seed dataset is in src/data/skins.ts with this shape:
 - skinAliases[]
 - imageUrl
 - source
-
-This initial dataset uses placeholder images and a starter fan-curated sample.
-
-## Next implementation steps
-
-1. Import first official capture and verify record quality.
-2. Expand key mappings in scripts/ingest/from-capture.mjs as needed for payload shape changes.
-3. Add unit tests for scoring and answer normalization.
-4. Configure Netlify deploy pipeline.

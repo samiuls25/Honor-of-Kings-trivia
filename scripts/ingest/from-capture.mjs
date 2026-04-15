@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import https from 'node:https'
 import path from 'node:path'
 
 const DEFAULT_CAPTURE_CANDIDATES = [
@@ -85,6 +86,8 @@ const SKIN_ALIAS_KEYS = [
   'skinAlias',
   'skin_alias',
 ]
+
+const KNOWN_HOK_JSON_URL_PATTERN = /\/zlkdatasys\/.+\.json/i
 
 async function fileExists(filePath) {
   try {
@@ -192,6 +195,15 @@ function toSlug(value) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
     .slice(0, 96)
+}
+
+function normalizeGuess(input) {
+  return String(input)
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
 }
 
 function absolutizeImage(imageValue, sourceUrl) {
@@ -315,6 +327,188 @@ function normalizeRecords(records) {
   })
 }
 
+function toCleanString(value) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  return ''
+}
+
+function parseKnownHokRecords(payloads) {
+  const records = []
+  const heroAliasesById = new Map()
+
+  for (const payloadInfo of payloads) {
+    const heroList = payloadInfo?.payload?.yzzyxl_5891
+    if (!Array.isArray(heroList)) {
+      continue
+    }
+
+    for (const hero of heroList) {
+      if (!hero || typeof hero !== 'object') {
+        continue
+      }
+
+      const heroId = toCleanString(hero.id_6123)
+      if (!heroId) {
+        continue
+      }
+
+      const aliasCandidates = [
+        toCleanString(hero.yxpy_5883),
+        toCleanString(hero.mz_6951),
+        toCleanString(hero.ch_1965),
+        toCleanString(hero.zyyx_9786),
+      ].filter(Boolean)
+
+      const existing = heroAliasesById.get(heroId) ?? new Set()
+      for (const alias of aliasCandidates) {
+        existing.add(alias)
+      }
+      heroAliasesById.set(heroId, existing)
+    }
+  }
+
+  for (const payloadInfo of payloads) {
+    const skinList = payloadInfo?.payload?.pflbzt_5151
+    if (!Array.isArray(skinList)) {
+      continue
+    }
+
+    for (const skin of skinList) {
+      if (!skin || typeof skin !== 'object') {
+        continue
+      }
+
+      const heroName = toCleanString(skin.pfjstc_2455)
+      const skinName = toCleanString(skin.btpfjs_7484)
+      const heroId = toCleanString(skin.pfjsgy_4147) || toSlug(heroName)
+      const skinSeriesName = toCleanString(skin.pftxmc_8315)
+      const imageRaw =
+        toCleanString(skin.pfjspc_4348) ||
+        toCleanString(skin.pfjsyd_1886) ||
+        toCleanString(skin.yddsbf_5441)
+
+      if (!heroName || !skinName || !imageRaw) {
+        continue
+      }
+
+      const heroAliases = [...(heroAliasesById.get(heroId) ?? new Set())].filter(
+        (alias) => normalizeGuess(alias) !== normalizeGuess(heroName),
+      )
+
+      const skinAliases = [skinSeriesName].filter(Boolean)
+
+      records.push({
+        id: `${heroId}-${toSlug(skinName)}`,
+        heroId,
+        heroName,
+        heroAliases,
+        skinName,
+        skinAliases,
+        imageUrl: absolutizeImage(imageRaw, payloadInfo.sourceUrl),
+        source: payloadInfo.sourceUrl,
+      })
+    }
+  }
+
+  return records
+}
+
+function fetchJsonText(url, serverIp) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url)
+
+    const options = {
+      protocol: parsed.protocol,
+      hostname: parsed.hostname,
+      path: `${parsed.pathname}${parsed.search}`,
+      method: 'GET',
+      servername: parsed.hostname,
+      timeout: 15000,
+      headers: {
+        accept: 'application/json,text/plain,*/*',
+        'accept-encoding': 'identity',
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135 Safari/537.36',
+      },
+    }
+
+    if (serverIp && /^\d+\.\d+\.\d+\.\d+$/.test(serverIp)) {
+      options.lookup = (_hostname, lookupOptions, callback) => {
+        if (lookupOptions?.all) {
+          callback(null, [{ address: serverIp, family: 4 }])
+          return
+        }
+
+        callback(null, serverIp, 4)
+      }
+    }
+
+    const request = https.request(options, (response) => {
+      const chunks = []
+      response.on('data', (chunk) => chunks.push(chunk))
+      response.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8')
+        if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(`HTTP ${response.statusCode} for ${url}`))
+          return
+        }
+        resolve(body)
+      })
+    })
+
+    request.on('error', reject)
+    request.on('timeout', () => {
+      request.destroy(new Error(`Request timeout for ${url}`))
+    })
+    request.end()
+  })
+}
+
+async function fetchPayloadsFromSanitizedHar(harObject) {
+  const entries = Array.isArray(harObject?.log?.entries) ? harObject.log.entries : []
+  const candidates = new Map()
+
+  for (const entry of entries) {
+    const url = entry?.request?.url || ''
+    const serverIp = entry?.serverIPAddress || ''
+
+    if (!KNOWN_HOK_JSON_URL_PATTERN.test(url)) {
+      continue
+    }
+
+    if (!candidates.has(url)) {
+      candidates.set(url, serverIp)
+    }
+  }
+
+  const prioritized = [...candidates.entries()].sort((left, right) => {
+    const leftScore = Number(/pfjs|heroList/i.test(left[0]))
+    const rightScore = Number(/pfjs|heroList/i.test(right[0]))
+    return rightScore - leftScore
+  })
+
+  const payloads = []
+
+  for (const [url, serverIp] of prioritized.slice(0, 24)) {
+    try {
+      const body = await fetchJsonText(url, serverIp)
+      const parsed = parseJsonSafe(body)
+      if (parsed) {
+        payloads.push({ sourceUrl: url, payload: parsed })
+      }
+    } catch {
+      // Ignore individual fetch failures; at least one successful payload is enough.
+    }
+  }
+
+  return payloads
+}
+
 function extractPayloadsFromHar(harObject) {
   const entries = Array.isArray(harObject?.log?.entries) ? harObject.log.entries : []
   const payloads = []
@@ -354,7 +548,17 @@ async function readCapturePayloads(capturePath) {
   }
 
   if (capturePath.endsWith('.har')) {
-    return extractPayloadsFromHar(parsed)
+    const fromResponses = extractPayloadsFromHar(parsed)
+    if (fromResponses.length > 0) {
+      return fromResponses
+    }
+
+    const fromSanitizedFallback = await fetchPayloadsFromSanitizedHar(parsed)
+    if (fromSanitizedFallback.length > 0) {
+      return fromSanitizedFallback
+    }
+
+    return []
   }
 
   return [{ sourceUrl: path.basename(capturePath), payload: parsed }]
@@ -369,6 +573,10 @@ async function main() {
   }
 
   const candidateRecords = []
+
+  for (const record of parseKnownHokRecords(payloads)) {
+    candidateRecords.push(record)
+  }
 
   for (const payloadInfo of payloads) {
     const objects = []
