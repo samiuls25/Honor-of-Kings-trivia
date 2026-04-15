@@ -14,6 +14,8 @@ A fun little trivia web app for guessing heroes and skins from splash art. Test 
   - 5 Minute Easy (+1 correct, no penalty)
   - 5 Minute Hard (+1 correct, -1 wrong)
   - Sudden Death (first wrong ends the run)
+- Gallery mode:
+  - Separate non-game skin gallery for browsing artwork
 - Responsive UI for desktop and mobile.
 
 ## Stack

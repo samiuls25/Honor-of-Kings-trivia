@@ -45,6 +45,8 @@ interface Option<TValue extends string> {
   description: string
 }
 
+type ViewMode = 'play' | 'gallery'
+
 const targetOptions: Option<GuessTarget>[] = [
   {
     value: 'hero-name',
@@ -126,6 +128,7 @@ function buildInitialGame(config: GameConfig): ActiveGame {
 }
 
 function App() {
+  const [viewMode, setViewMode] = useState<ViewMode>('play')
   const [config, setConfig] = useState<GameConfig>(defaultConfig)
   const [game, setGame] = useState<ActiveGame | null>(null)
   const [typedGuess, setTypedGuess] = useState('')
@@ -133,6 +136,15 @@ function App() {
   const feedbackTimeoutRef = useRef<number | null>(null)
 
   const datasetIssues = useMemo(() => validateSkinDataset(SKINS), [])
+  const gallerySkins = useMemo(
+    () =>
+      [...SKINS].sort(
+        (left, right) =>
+          left.heroName.localeCompare(right.heroName) ||
+          left.skinName.localeCompare(right.skinName),
+      ),
+    [],
+  )
   const gameStatus = game?.status ?? 'ended'
   const gameDeadlineMs = game?.deadlineMs ?? null
 
@@ -205,6 +217,17 @@ function App() {
         endReason: 'manual',
       }
     })
+  }
+
+  const openGallery = () => {
+    setViewMode('gallery')
+    setGame(null)
+    setFeedback(null)
+    setTypedGuess('')
+  }
+
+  const openPlay = () => {
+    setViewMode('play')
   }
 
   const submitAnswer = (rawGuess: string) => {
@@ -309,6 +332,31 @@ function App() {
           Guess heroes or skin names from the displayed art. Mix input mode,
           category mode, and scoring style for different challenge paths!
         </p>
+
+        <div className="view-switch" role="tablist" aria-label="App sections">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'play'}
+            className={
+              viewMode === 'play' ? 'switch-button active' : 'switch-button'
+            }
+            onClick={openPlay}
+          >
+            Play Trivia
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'gallery'}
+            className={
+              viewMode === 'gallery' ? 'switch-button active' : 'switch-button'
+            }
+            onClick={openGallery}
+          >
+            Skin Gallery
+          </button>
+        </div>
       </header>
 
       {datasetIssues.length > 0 && (
@@ -318,7 +366,7 @@ function App() {
         </aside>
       )}
 
-      {!game && (
+      {viewMode === 'play' && !game && (
         <section className="panel">
           <h2>Game Setup</h2>
 
@@ -411,7 +459,7 @@ function App() {
         </section>
       )}
 
-      {game?.status === 'playing' && (
+      {viewMode === 'play' && game?.status === 'playing' && (
         <section className="panel play-area">
           <div className="hud">
             <div className="chip">Score: {game.score}</div>
@@ -493,7 +541,7 @@ function App() {
         </section>
       )}
 
-      {game?.status === 'ended' && (
+      {viewMode === 'play' && game?.status === 'ended' && (
         <section className="panel">
           <h2>Results</h2>
           <p className="result-subtitle">{endReasonLabel}</p>
@@ -535,6 +583,34 @@ function App() {
             >
               Change Modes
             </button>
+          </div>
+        </section>
+      )}
+
+      {viewMode === 'gallery' && (
+        <section className="panel gallery-panel">
+          <div className="gallery-head">
+            <h2>Skin Gallery</h2>
+            <p className="result-subtitle">
+              Browse every available skin artwork without starting a game.
+            </p>
+            <div className="chip">Items: {gallerySkins.length}</div>
+          </div>
+
+          <div className="gallery-grid">
+            {gallerySkins.map((skin) => (
+              <article key={skin.id} className="gallery-card">
+                <img
+                  src={skin.imageUrl}
+                  alt={`${skin.heroName} - ${skin.skinName}`}
+                  loading="lazy"
+                />
+                <div className="gallery-meta">
+                  <p className="gallery-skin">{skin.skinName}</p>
+                  <p className="gallery-hero">{skin.heroName}</p>
+                </div>
+              </article>
+            ))}
           </div>
         </section>
       )}
