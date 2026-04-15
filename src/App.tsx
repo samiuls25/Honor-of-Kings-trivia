@@ -303,11 +303,11 @@ function App() {
   return (
     <div className="app-shell">
       <header className="masthead">
-        <p className="eyebrow">Honor of Kings Skin Trivia</p>
-        <h1>Skin Cipher Arena</h1>
+        <p className="eyebrow">V1.0</p>
+        <h1>Honor of Kings Trivia</h1>
         <p className="lede">
-          Identify heroes or skin names from the displayed art. Mix input mode,
-          category mode, and scoring style for different challenge paths.
+          Guess heroes or skin names from the displayed art. Mix input mode,
+          category mode, and scoring style for different challenge paths!
         </p>
       </header>
 

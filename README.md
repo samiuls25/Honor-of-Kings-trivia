@@ -1,10 +1,6 @@
 # Honor of Kings Skin Trivia
 
-Trivia web app for guessing heroes and skins from splash art.
-
-## Project status
-
-This repository is the technical starting point for the app and has not been deployed yet.
+A fun little trivia web app for guessing heroes and skins from splash art. Test your knowledge or just enjoy the artwork.
 
 ## Current capabilities
 
