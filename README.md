@@ -18,6 +18,7 @@ A fun little trivia web app for guessing heroes and skins from splash art. Test 
 - Question target modes:
   - Guess Hero Name
   - Guess Skin Name
+  - Guess OST Track Title
 - Answer input modes:
   - Typed entry (case-insensitive)
   - 4-option multiple choice
@@ -27,6 +28,9 @@ A fun little trivia web app for guessing heroes and skins from splash art. Test 
   - Sudden Death (first wrong ends the run)
 - Gallery mode:
   - Separate non-game skin gallery for browsing artwork
+- OST mode:
+  - Embedded audio/video player for track-based questions
+  - Optional artwork reveal toggle while answering
 - Responsive UI for desktop and mobile.
 
 ## Stack
@@ -73,13 +77,51 @@ npm run ingest:validate
 npm run ingest:generate
 ```
 
+Additional source-isolated pipelines:
+
+```bash
+# Secondary skins source (qing API) -> src/data/skins.qing.generated.ts
+npm run ingest:qing:all
+
+# OST source JSON -> src/data/ost.generated.ts
+npm run ingest:ost:all
+```
+
 Output files:
 
 - data/processed/skins.normalized.json
 - data/processed/meta.json
 - src/data/skins.generated.ts
+- data/processed/skins.qing.normalized.json
+- data/processed/meta.qing.json
+- src/data/skins.qing.generated.ts
+- data/processed/ost.normalized.json
+- data/processed/ost-meta.json
+- src/data/ost.generated.ts
 
 At runtime, src/data/skins.ts automatically uses generated data when available and falls back to the starter seed dataset otherwise.
+
+The app keeps source separation intact:
+- Existing website capture extractor remains primary.
+- qing API dataset is optional backfill.
+- OST dataset is independent and never overwrites skin capture files.
+
+## OST source file format
+
+Place your OST source file at `data/raw/hok-ost-source.json` and run `npm run ingest:ost:all`.
+
+Example custom shape:
+
+```json
+[
+  {
+    "trackTitle": "Track Name",
+    "artistName": "Honor of Kings Audio Team",
+    "videoId": "YOUTUBE_VIDEO_ID",
+    "imageUrl": "https://img.youtube.com/vi/YOUTUBE_VIDEO_ID/maxresdefault.jpg"
+  }
+]
+```
 
 ## Data model
 

@@ -1,5 +1,9 @@
 import type { SkinRecord } from '../types'
 import { GENERATED_DATASET_META, GENERATED_SKINS } from './skins.generated'
+import {
+  GENERATED_DATASET_META as GENERATED_QING_DATASET_META,
+  GENERATED_SKINS as GENERATED_QING_SKINS,
+} from './skins.qing.generated'
 
 type SeedSkin = Omit<SkinRecord, 'imageUrl' | 'source'>
 
@@ -265,20 +269,77 @@ const fallbackSkins: SkinRecord[] = seedSkins.map((skin, index) => ({
   source: 'starter-curated-v1',
 }))
 
+function normalizeKey(value: string) {
+  return value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function looksPlayableInEnglish(value: string): boolean {
+  return /[a-z]/i.test(value)
+}
+
+function skinPairKey(skin: SkinRecord): string {
+  return `${normalizeKey(skin.heroName)}|${normalizeKey(skin.skinName)}`
+}
+
+function mergeQingBackfill(primary: SkinRecord[], fallback: SkinRecord[]) {
+  const seenKeys = new Set(primary.map((skin) => skinPairKey(skin)))
+  const merged = [...primary]
+  let added = 0
+  let skippedNonEnglish = 0
+
+  for (const candidate of fallback) {
+    const key = skinPairKey(candidate)
+
+    if (seenKeys.has(key)) {
+      continue
+    }
+
+    if (!looksPlayableInEnglish(candidate.heroName + candidate.skinName)) {
+      skippedNonEnglish += 1
+      continue
+    }
+
+    seenKeys.add(key)
+    merged.push(candidate)
+    added += 1
+  }
+
+  return {
+    merged,
+    added,
+    skippedNonEnglish,
+  }
+}
+
 const usingGeneratedData = GENERATED_SKINS.length > 0
 
-export const SKINS: SkinRecord[] = usingGeneratedData
-  ? GENERATED_SKINS
-  : fallbackSkins
+const primarySkins = usingGeneratedData ? GENERATED_SKINS : fallbackSkins
+const qingBackfill = mergeQingBackfill(primarySkins, GENERATED_QING_SKINS)
+
+export const SKINS: SkinRecord[] = qingBackfill.merged
+
+const primaryMeta = usingGeneratedData
+  ? GENERATED_DATASET_META
+  : {
+      version: '0.1.0',
+      source: 'starter-curated-v1',
+      items: primarySkins.length,
+      note:
+        'Starter fan dataset using placeholders; replace with official mappings via ingestion pipeline.',
+    }
 
 export const DATASET_META = {
-  ...(usingGeneratedData
-    ? GENERATED_DATASET_META
-    : {
-        version: '0.1.0',
-        source: 'starter-curated-v1',
-        items: SKINS.length,
-        note:
-          'Starter fan dataset using placeholders; replace with official mappings via ingestion pipeline.',
-      }),
+  ...primaryMeta,
+  itemsPrimary: primarySkins.length,
+  items: SKINS.length,
+  qing: {
+    source: GENERATED_QING_DATASET_META.source,
+    items: GENERATED_QING_DATASET_META.items,
+    backfillAdded: qingBackfill.added,
+    skippedNonEnglish: qingBackfill.skippedNonEnglish,
+  },
 }

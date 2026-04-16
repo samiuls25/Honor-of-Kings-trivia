@@ -11,7 +11,16 @@
     "ingest:extract": "node scripts/ingest/from-capture.mjs",
     "ingest:validate": "node scripts/ingest/validate-skins.mjs",
     "ingest:generate": "node scripts/ingest/generate-ts.mjs",
-    "ingest:all": "npm run ingest:extract && npm run ingest:validate && npm run ingest:generate"
+    "ingest:all": "npm run ingest:extract && npm run ingest:validate && npm run ingest:generate",
+    "ingest:qing:extract": "node scripts/ingest/from-qing-api.mjs",
+    "ingest:qing:validate": "node scripts/ingest/validate-skins.mjs data/processed/skins.qing.normalized.json",
+    "ingest:qing:quality": "node scripts/ingest/report-skins-quality.mjs data/processed/skins.qing.normalized.json",
+    "ingest:qing:generate": "node scripts/ingest/generate-ts.mjs data/processed/skins.qing.normalized.json data/processed/meta.qing.json src/data/skins.qing.generated.ts",
+    "ingest:qing:all": "npm run ingest:qing:extract && npm run ingest:qing:validate && npm run ingest:qing:quality && npm run ingest:qing:generate",
+    "ingest:ost:extract": "node scripts/ingest/from-ost-source.mjs",
+    "ingest:ost:validate": "node scripts/ingest/validate-ost.mjs",
+    "ingest:ost:generate": "node scripts/ingest/generate-ost-ts.mjs",
+    "ingest:ost:all": "npm run ingest:ost:extract && npm run ingest:ost:validate && npm run ingest:ost:generate"
   },
   "dependencies": {
     "react": "^19.2.4",

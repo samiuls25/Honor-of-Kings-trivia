@@ -189,6 +189,12 @@ h3 {
   background: rgba(49, 76, 110, 0.8);
 }
 
+.option-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .title {
   display: block;
   font-weight: 700;
@@ -294,6 +300,27 @@ h3 {
   margin: 0.85rem 0 0.7rem;
 }
 
+.audio-stage {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.audio-stage iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(245, 217, 164, 0.28);
+  border-radius: 10px;
+  background: #0d1628;
+}
+
+.audio-stage img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 217, 164, 0.28);
+}
+
 .typed-answer {
   display: flex;
   gap: 0.5rem;
@@ -333,6 +360,11 @@ h3 {
 .result-subtitle {
   margin: 0 0 0.8rem;
   color: var(--muted);
+}
+
+.setup-error {
+  margin-top: 0.85rem;
+  color: #ffd3c8;
 }
 
 .results-grid {

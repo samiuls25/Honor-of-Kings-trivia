@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { OST_DATASET_META, OST_TRACKS } from './data/ost'
 import { DATASET_META, SKINS } from './data/skins'
 import {
   calculateAccuracy,
@@ -10,6 +11,7 @@ import {
   nextSkinFromQueue,
   shouldEndAfterAnswer,
   shuffle,
+  validateOstDataset,
   validateSkinDataset,
 } from './game/engine'
 import type {
@@ -18,7 +20,7 @@ import type {
   GuessTarget,
   Question,
   ScoringStyle,
-  SkinRecord,
+  TriviaRecord,
 } from './types'
 
 type EndReason = 'timeout' | 'wrong-answer' | 'manual' | null
@@ -26,7 +28,7 @@ type EndReason = 'timeout' | 'wrong-answer' | 'manual' | null
 interface ActiveGame {
   status: 'playing' | 'ended'
   config: GameConfig
-  queue: SkinRecord[]
+  queue: TriviaRecord[]
   queueIndex: number
   question: Question
   score: number
@@ -43,22 +45,33 @@ interface Option<TValue extends string> {
   value: TValue
   label: string
   description: string
+  disabled?: boolean
 }
 
 type ViewMode = 'play' | 'gallery'
 
-const targetOptions: Option<GuessTarget>[] = [
-  {
-    value: 'hero-name',
-    label: 'Guess Hero Name',
-    description: 'A skin image is shown. Identify the hero who owns it.',
-  },
-  {
-    value: 'skin-name',
-    label: 'Guess Skin Name',
-    description: 'A skin image is shown. Identify the skin title.',
-  },
-]
+function buildTargetOptions(hasOstTracks: boolean): Option<GuessTarget>[] {
+  return [
+    {
+      value: 'hero-name',
+      label: 'Guess Hero Name',
+      description: 'A skin image is shown. Identify the hero who owns it.',
+    },
+    {
+      value: 'skin-name',
+      label: 'Guess Skin Name',
+      description: 'A skin image is shown. Identify the skin title.',
+    },
+    {
+      value: 'ost-title',
+      label: 'Guess OST Track',
+      description: hasOstTracks
+        ? 'An embedded track is played. Identify the track title.'
+        : 'Load OST data first (run ingest:ost:all) to enable this mode.',
+      disabled: !hasOstTracks,
+    },
+  ]
+}
 
 const answerModeOptions: Option<AnswerMode>[] = [
   {
@@ -104,10 +117,19 @@ function getModeLabel<TValue extends string>(
   return options.find((option) => option.value === value)?.label ?? value
 }
 
+function poolForTarget(target: GuessTarget): TriviaRecord[] {
+  return target === 'ost-title' ? OST_TRACKS : SKINS
+}
+
 function buildInitialGame(config: GameConfig): ActiveGame {
-  const queue = shuffle([...SKINS])
-  const firstSkin = queue[0]
-  const firstQuestion = createQuestion(firstSkin, config, SKINS)
+  const pool = poolForTarget(config.target)
+  if (pool.length === 0) {
+    throw new Error('No records available for this mode yet.')
+  }
+
+  const queue = shuffle([...pool])
+  const firstRecord = queue[0]
+  const firstQuestion = createQuestion(firstRecord, config, pool)
   const initialLimit = initialTimeLimitMs(config.scoringStyle)
 
   return {
@@ -133,9 +155,18 @@ function App() {
   const [game, setGame] = useState<ActiveGame | null>(null)
   const [typedGuess, setTypedGuess] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [setupError, setSetupError] = useState<string | null>(null)
+  const [showOstArtwork, setShowOstArtwork] = useState(false)
   const feedbackTimeoutRef = useRef<number | null>(null)
 
-  const datasetIssues = useMemo(() => validateSkinDataset(SKINS), [])
+  const hasOstTracks = OST_TRACKS.length > 0
+  const targetOptions = useMemo(() => buildTargetOptions(hasOstTracks), [hasOstTracks])
+  const skinDatasetIssues = useMemo(() => validateSkinDataset(SKINS), [])
+  const ostDatasetIssues = useMemo(() => validateOstDataset(OST_TRACKS), [])
+  const datasetIssues = useMemo(
+    () => [...skinDatasetIssues, ...ostDatasetIssues.map((issue) => `OST: ${issue}`)],
+    [ostDatasetIssues, skinDatasetIssues],
+  )
   const gallerySkins = useMemo(
     () =>
       [...SKINS].sort(
@@ -191,8 +222,22 @@ function App() {
 
   const startGame = () => {
     setFeedback(null)
+    setSetupError(null)
     setTypedGuess('')
-    setGame(buildInitialGame(config))
+    setShowOstArtwork(false)
+
+    const selectedTarget = targetOptions.find((option) => option.value === config.target)
+    if (selectedTarget?.disabled) {
+      setSetupError('This mode is disabled until OST data is loaded.')
+      return
+    }
+
+    try {
+      setGame(buildInitialGame(config))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to start this mode.'
+      setSetupError(message)
+    }
   }
 
   const startGameFromPreviousConfig = () => {
@@ -200,9 +245,23 @@ function App() {
       return
     }
     setFeedback(null)
+    setSetupError(null)
     setTypedGuess('')
     setConfig(game.config)
-    setGame(buildInitialGame(game.config))
+    setShowOstArtwork(false)
+
+    const selectedTarget = targetOptions.find((option) => option.value === game.config.target)
+    if (selectedTarget?.disabled) {
+      setSetupError('This mode is disabled until OST data is loaded.')
+      return
+    }
+
+    try {
+      setGame(buildInitialGame(game.config))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to start this mode.'
+      setSetupError(message)
+    }
   }
 
   const stopGame = () => {
@@ -223,11 +282,13 @@ function App() {
     setViewMode('gallery')
     setGame(null)
     setFeedback(null)
+    setSetupError(null)
     setTypedGuess('')
   }
 
   const openPlay = () => {
     setViewMode('play')
+    setSetupError(null)
   }
 
   const submitAnswer = (rawGuess: string) => {
@@ -298,17 +359,18 @@ function App() {
           const { queue, queueIndex, nextSkin } = nextSkinFromQueue(
             previous.queue,
             previous.queueIndex,
-            previous.question.skinId,
+            previous.question.recordId,
           )
 
           return {
             ...previous,
             queue,
             queueIndex,
-            question: createQuestion(nextSkin, previous.config, SKINS),
+            question: createQuestion(nextSkin, previous.config, previous.queue),
           }
         })
 
+        setShowOstArtwork(false)
         setFeedback(null)
       }, 850)
     }
@@ -377,16 +439,24 @@ function App() {
                 <button
                   key={option.value}
                   type="button"
+                  disabled={option.disabled}
                   className={
                     config.target === option.value
                       ? 'option-card active'
                       : 'option-card'
                   }
                   onClick={() =>
-                    setConfig((previous) => ({
-                      ...previous,
-                      target: option.value,
-                    }))
+                    setConfig((previous) => {
+                      if (option.disabled) {
+                        return previous
+                      }
+
+                      setSetupError(null)
+                      return {
+                        ...previous,
+                        target: option.value,
+                      }
+                    })
                   }
                 >
                   <span className="title">{option.label}</span>
@@ -450,12 +520,17 @@ function App() {
 
           <div className="setup-footer">
             <p>
-              Seed dataset: {DATASET_META.items} skins from {DATASET_META.source}.
+              Skin dataset: {DATASET_META.items} entries from {DATASET_META.source}.
+            </p>
+            <p>
+              OST dataset: {OST_DATASET_META.items} tracks from {OST_DATASET_META.source}.
             </p>
             <button className="primary-button" onClick={startGame}>
               Start Match
             </button>
           </div>
+
+          {setupError && <p className="result-subtitle setup-error">{setupError}</p>}
         </section>
       )}
 
@@ -480,10 +555,47 @@ function App() {
           </div>
 
           <article className="question-card">
-            <img
-              src={game.question.imageUrl}
-              alt={`Skin artwork prompt ${game.question.id}`}
-            />
+            {game.question.mediaType === 'image' && (
+              <img
+                src={game.question.imageUrl}
+                alt={`Skin artwork prompt ${game.question.id}`}
+              />
+            )}
+
+            {game.question.mediaType === 'audio' && (
+              <div className="audio-stage">
+                {game.question.audioUrl ? (
+                  <iframe
+                    src={game.question.audioUrl}
+                    title={`OST player ${game.question.id}`}
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                ) : (
+                  <p className="result-subtitle">
+                    Audio player URL missing for this track.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setShowOstArtwork((previous) => !previous)}
+                >
+                  {showOstArtwork ? 'Hide Track Artwork' : 'Show Track Artwork'}
+                </button>
+
+                {showOstArtwork && (
+                  <img
+                    src={game.question.imageUrl}
+                    alt={`Track artwork prompt ${game.question.id}`}
+                  />
+                )}
+              </div>
+            )}
+
             <h2>{game.question.prompt}</h2>
 
             {game.config.answerMode === 'typed' && (
@@ -500,7 +612,9 @@ function App() {
                   placeholder={
                     game.config.target === 'hero-name'
                       ? 'Type hero name'
-                      : 'Type skin name'
+                      : game.config.target === 'skin-name'
+                        ? 'Type skin name'
+                        : 'Type track title'
                   }
                   autoFocus
                 />

@@ -1,4 +1,4 @@
-export type GuessTarget = 'hero-name' | 'skin-name'
+export type GuessTarget = 'hero-name' | 'skin-name' | 'ost-title'
 
 export type AnswerMode = 'typed' | 'multiple-choice'
 
@@ -24,10 +24,25 @@ export interface SkinRecord {
   source: string
 }
 
+export interface OstRecord {
+  id: string
+  trackTitle: string
+  trackAliases: string[]
+  artistName: string
+  artistAliases: string[]
+  imageUrl: string
+  audioUrl: string
+  source: string
+}
+
+export type TriviaRecord = SkinRecord | OstRecord
+
 export interface Question {
   id: string
-  skinId: string
+  recordId: string
   imageUrl: string
+  audioUrl: string | null
+  mediaType: 'image' | 'audio'
   prompt: string
   target: GuessTarget
   correctAnswer: string

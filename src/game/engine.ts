@@ -1,9 +1,11 @@
 import type {
   GameConfig,
   GuessTarget,
+  OstRecord,
   Question,
   ScoringStyle,
   SkinRecord,
+  TriviaRecord,
 } from '../types'
 
 export function shuffle<T>(items: T[]): T[] {
@@ -40,23 +42,49 @@ function uniqueNormalized(values: string[]): string[] {
   return result
 }
 
-function answerForTarget(skin: SkinRecord, target: GuessTarget): string {
-  return target === 'hero-name' ? skin.heroName : skin.skinName
+function isSkinRecord(record: TriviaRecord): record is SkinRecord {
+  return 'heroName' in record && 'skinName' in record
 }
 
-function acceptedAnswersForTarget(
-  skin: SkinRecord,
-  target: GuessTarget,
-): string[] {
-  if (target === 'hero-name') {
-    return uniqueNormalized([skin.heroName, ...skin.heroAliases])
+function isOstRecord(record: TriviaRecord): record is OstRecord {
+  return 'trackTitle' in record && 'audioUrl' in record
+}
+
+function answerForTarget(record: TriviaRecord, target: GuessTarget): string {
+  if (target === 'ost-title') {
+    return isOstRecord(record) ? record.trackTitle : ''
   }
 
-  return uniqueNormalized([skin.skinName, ...skin.skinAliases])
+  if (!isSkinRecord(record)) {
+    return ''
+  }
+
+  return target === 'hero-name' ? record.heroName : record.skinName
 }
 
-function candidatesForTarget(pool: SkinRecord[], target: GuessTarget): string[] {
-  const values = pool.map((skin) => answerForTarget(skin, target))
+function acceptedAnswersForTarget(record: TriviaRecord, target: GuessTarget): string[] {
+  if (target === 'ost-title') {
+    if (!isOstRecord(record)) {
+      return []
+    }
+    return uniqueNormalized([record.trackTitle, ...record.trackAliases])
+  }
+
+  if (!isSkinRecord(record)) {
+    return []
+  }
+
+  if (target === 'hero-name') {
+    return uniqueNormalized([record.heroName, ...record.heroAliases])
+  }
+
+  return uniqueNormalized([record.skinName, ...record.skinAliases])
+}
+
+function candidatesForTarget(pool: TriviaRecord[], target: GuessTarget): string[] {
+  const values = pool
+    .map((record) => answerForTarget(record, target))
+    .filter((value) => value.trim().length > 0)
   return uniqueNormalized(values)
 }
 
@@ -73,16 +101,23 @@ function buildMultipleChoiceOptions(
 }
 
 export function createQuestion(
-  skin: SkinRecord,
+  record: TriviaRecord,
   config: GameConfig,
-  pool: SkinRecord[],
+  pool: TriviaRecord[],
 ): Question {
-  const correctAnswer = answerForTarget(skin, config.target)
-  const acceptedAnswers = acceptedAnswersForTarget(skin, config.target)
-  const prompt =
-    config.target === 'hero-name'
-      ? 'Which hero owns this skin?'
-      : 'What is the skin name shown here?'
+  const correctAnswer = answerForTarget(record, config.target)
+  const acceptedAnswers = acceptedAnswersForTarget(record, config.target)
+
+  const prompt = (() => {
+    if (config.target === 'hero-name') {
+      return 'Which hero owns this skin?'
+    }
+    if (config.target === 'skin-name') {
+      return 'What is the skin name shown here?'
+    }
+    return 'What is the title of this Honor of Kings track?'
+  })()
+
   const options =
     config.answerMode === 'multiple-choice'
       ? buildMultipleChoiceOptions(
@@ -91,10 +126,15 @@ export function createQuestion(
         )
       : []
 
+  const mediaType = isOstRecord(record) ? 'audio' : 'image'
+  const audioUrl = isOstRecord(record) ? record.audioUrl : null
+
   return {
-    id: `${skin.id}-${config.target}-${config.answerMode}`,
-    skinId: skin.id,
-    imageUrl: skin.imageUrl,
+    id: `${record.id}-${config.target}-${config.answerMode}`,
+    recordId: record.id,
+    imageUrl: record.imageUrl,
+    audioUrl,
+    mediaType,
     prompt,
     target: config.target,
     correctAnswer,
@@ -148,14 +188,14 @@ export function calculateAccuracy(correct: number, wrong: number): number {
   return Math.round((correct / attempts) * 100)
 }
 
-export function nextSkinFromQueue(
-  queue: SkinRecord[],
+export function nextSkinFromQueue<TRecord extends { id: string }>(
+  queue: TRecord[],
   currentIndex: number,
-  currentSkinId: string,
+  currentRecordId: string,
 ): {
-  queue: SkinRecord[]
+  queue: TRecord[]
   queueIndex: number
-  nextSkin: SkinRecord
+  nextSkin: TRecord
 } {
   if (queue.length === 0) {
     throw new Error('Question queue cannot be empty.')
@@ -168,7 +208,7 @@ export function nextSkinFromQueue(
     nextQueue = shuffle([...queue])
     queueIndex = 0
 
-    if (nextQueue.length > 1 && nextQueue[0].id === currentSkinId) {
+    if (nextQueue.length > 1 && nextQueue[0].id === currentRecordId) {
       ;[nextQueue[0], nextQueue[1]] = [nextQueue[1], nextQueue[0]]
     }
   }
@@ -201,6 +241,36 @@ export function validateSkinDataset(skins: SkinRecord[]): string[] {
     }
     if (!skin.imageUrl.startsWith('http')) {
       issues.push(`Image URL must be absolute for skin ${skin.id}.`)
+    }
+  }
+
+  return issues
+}
+
+export function validateOstDataset(records: OstRecord[]): string[] {
+  const issues: string[] = []
+  const ids = new Set<string>()
+
+  for (const record of records) {
+    if (!record.id.trim()) {
+      issues.push('An OST record is missing an id.')
+    }
+    if (ids.has(record.id)) {
+      issues.push(`Duplicate OST id found: ${record.id}`)
+    }
+    ids.add(record.id)
+
+    if (!record.trackTitle.trim()) {
+      issues.push(`Missing track title for OST ${record.id}.`)
+    }
+    if (!record.artistName.trim()) {
+      issues.push(`Missing artist name for OST ${record.id}.`)
+    }
+    if (!record.imageUrl.startsWith('http')) {
+      issues.push(`Image URL must be absolute for OST ${record.id}.`)
+    }
+    if (!record.audioUrl.startsWith('http')) {
+      issues.push(`Audio URL must be absolute for OST ${record.id}.`)
     }
   }
 
