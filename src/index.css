@@ -189,6 +189,28 @@ h3 {
   background: rgba(49, 76, 110, 0.8);
 }
 
+.option-card-ost {
+  position: relative;
+  border-color: rgba(105, 211, 227, 0.5);
+  background:
+    linear-gradient(145deg, rgba(40, 76, 110, 0.85), rgba(72, 43, 103, 0.8)),
+    rgba(25, 43, 71, 0.55);
+}
+
+.option-card-ost::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 12px;
+  border: 1px solid rgba(118, 211, 168, 0.38);
+  pointer-events: none;
+}
+
+.option-card-ost.active {
+  border-color: rgba(105, 211, 227, 0.85);
+  box-shadow: 0 0 0 1px rgba(105, 211, 227, 0.28), 0 14px 26px rgba(0, 0, 0, 0.28);
+}
+
 .option-card:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -434,10 +456,74 @@ h3 {
   display: block;
 }
 
+.gallery-card-button {
+  border: 0;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .gallery-card:hover {
   transform: translateY(-2px);
   border-color: rgba(245, 217, 164, 0.52);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.gallery-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(4, 9, 18, 0.78);
+  backdrop-filter: blur(4px);
+  padding: 1rem;
+}
+
+.gallery-lightbox-card {
+  width: min(1000px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(13, 24, 42, 0.95);
+  box-shadow: 0 24px 40px rgba(0, 0, 0, 0.45);
+  padding: 0.85rem;
+}
+
+.gallery-lightbox-close {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gallery-lightbox-card img {
+  width: 100%;
+  margin-top: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 217, 164, 0.28);
+  max-height: min(74vh, 840px);
+  object-fit: contain;
+  background: rgba(8, 16, 29, 0.95);
+}
+
+.gallery-lightbox-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.65rem;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.gallery-lightbox-meta p {
+  margin: 0;
 }
 
 .gallery-meta {

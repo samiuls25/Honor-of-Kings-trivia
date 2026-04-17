@@ -132,7 +132,7 @@ const scoringOptions: Option<ScoringStyle>[] = [
 const defaultConfig: GameConfig = {
   target: 'hero-name',
   skinSource: 'official',
-  answerMode: 'typed',
+  answerMode: 'multiple-choice',
   scoringStyle: 'five-minute-easy',
 }
 
@@ -195,6 +195,9 @@ function App() {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [showOstArtwork, setShowOstArtwork] = useState(false)
+  const [selectedGallerySkin, setSelectedGallerySkin] = useState<SkinRecord | null>(
+    null,
+  )
   const feedbackTimeoutRef = useRef<number | null>(null)
 
   const hasOstTracks = OST_TRACKS.length > 0
@@ -265,6 +268,17 @@ function App() {
     }
   }, [gameStatus, gameDeadlineMs])
 
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedGallerySkin(null)
+      }
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   const startGame = () => {
     setFeedback(null)
     setSetupError(null)
@@ -329,11 +343,13 @@ function App() {
     setFeedback(null)
     setSetupError(null)
     setTypedGuess('')
+    setSelectedGallerySkin(null)
   }
 
   const openPlay = () => {
     setViewMode('play')
     setSetupError(null)
+    setSelectedGallerySkin(null)
   }
 
   const submitAnswer = (rawGuess: string) => {
@@ -485,11 +501,12 @@ function App() {
                   key={option.value}
                   type="button"
                   disabled={option.disabled}
-                  className={
-                    config.target === option.value
-                      ? 'option-card active'
-                      : 'option-card'
-                  }
+                  className={[
+                    config.target === option.value ? 'option-card active' : 'option-card',
+                    option.value === 'ost-title' ? 'option-card-ost' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                   onClick={() =>
                     setConfig((previous) => {
                       if (option.disabled) {
@@ -814,19 +831,56 @@ function App() {
           <div className="gallery-grid">
             {gallerySkins.map((skin) => (
               <article key={skin.id} className="gallery-card">
-                <img
-                  src={skin.imageUrl}
-                  alt={`${skin.heroName} - ${skin.skinName}`}
-                  loading="lazy"
-                />
-                <div className="gallery-meta">
-                  <p className="gallery-skin">{skin.skinName}</p>
-                  <p className="gallery-hero">{skin.heroName}</p>
-                </div>
+                <button
+                  type="button"
+                  className="gallery-card-button"
+                  onClick={() => setSelectedGallerySkin(skin)}
+                >
+                  <img
+                    src={skin.imageUrl}
+                    alt={`${skin.heroName} - ${skin.skinName}`}
+                    loading="lazy"
+                  />
+                  <div className="gallery-meta">
+                    <p className="gallery-skin">{skin.skinName}</p>
+                    <p className="gallery-hero">{skin.heroName}</p>
+                  </div>
+                </button>
               </article>
             ))}
           </div>
         </section>
+      )}
+
+      {selectedGallerySkin && (
+        <div
+          className="gallery-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Skin preview"
+          onClick={() => setSelectedGallerySkin(null)}
+        >
+          <div
+            className="gallery-lightbox-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="gallery-lightbox-close"
+              onClick={() => setSelectedGallerySkin(null)}
+            >
+              Close
+            </button>
+            <img
+              src={selectedGallerySkin.imageUrl}
+              alt={`${selectedGallerySkin.heroName} - ${selectedGallerySkin.skinName}`}
+            />
+            <div className="gallery-lightbox-meta">
+              <p>{selectedGallerySkin.skinName}</p>
+              <p>{selectedGallerySkin.heroName}</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
