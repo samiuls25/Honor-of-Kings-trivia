@@ -4,9 +4,10 @@ A fun little trivia web app for guessing heroes and skins from splash art, or gu
 
 ## Release Highlights
 
-- V1.3.0 introduces the all-new OST Hall for browsing soundtrack art, previewing tracks, seeking through audio, and sharing favorite tracks.
-- Full site experience now spans three primary sections: Play Trivia, Skin Gallery, and OST Hall.
-- Sharing now supports challenge links, gallery cards, and OST track links with social-preview metadata.
+- V1.0.X: Initial launch with hero/skin trivia core loop, timer-based runs, official capture ingestion pipeline, and score tracking.
+- V1.1.X: Added Skin Gallery mode for standalone artwork browsing outside active trivia rounds.
+- V1.2.X: Introduced OST Trivia Mode (waveform and track card display options) and OST ingestion pipeline. Added source-isolated/selectable data pipelines (newly integrated and polished data from qing api, official capture, hybrid). Expanded Gallery Mode with clickable cards for full high definition picture view. Selectable skin sources/hybrid mode and OST visualizer polish. Expanded sharing with challenge and gallery deep links plus social-preview metadata support.
+- V1.3.X: Introduced the all-new OST Hall with soundtrack browsing, scrubber seeking, and shareable track links. Optimized qing api data loading performance. OST Hall UX polish (scroll-to-player/selection clarity).
 
 ## Visuals: Game/Gallery/OST Hall
 ### Trivia Mode Home Page
