@@ -7,3 +7,21 @@
   to = "/.netlify/functions/share"
   status = 200
   force = true
+
+[[redirects]]
+  from = "/metrics/event"
+  to = "/.netlify/functions/metrics-event"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/metrics/summary"
+  to = "/.netlify/functions/metrics-summary"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/metrics/badge"
+  to = "/.netlify/functions/metrics-badge"
+  status = 200
+  force = true

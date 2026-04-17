@@ -25,6 +25,7 @@
     "ingest:ost:all": "npm run ingest:ost:fetch && npm run ingest:ost:extract && npm run ingest:ost:validate && npm run ingest:ost:generate"
   },
   "dependencies": {
+    "@netlify/blobs": "^10.0.7",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
