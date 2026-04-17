@@ -161,7 +161,7 @@ interface Option<TValue extends string> {
 
 type ViewMode = 'play' | 'gallery' | 'ost-hall'
 const WAVE_BARS = 40
-const APP_VERSION_LABEL = 'V1.3.0'
+const APP_VERSION_LABEL = 'V1.3.1'
 const IMAGE_PRELOAD_HOSTS = [
   'https://world.honorofkings.com',
   'https://game.gtimg.cn',
@@ -594,6 +594,13 @@ function App() {
   const [metricsSnapshot, setMetricsSnapshot] = useState<
     Awaited<ReturnType<typeof fetchMetricsSummary>>
   >(null)
+  const [showLiveStats, setShowLiveStats] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true
+    }
+
+    return window.localStorage.getItem('hok-live-stats-hidden') !== '1'
+  })
   const [incomingChallenge] = useState<SharedChallenge | null>(
     initialRouteState.incomingChallenge,
   )
@@ -689,6 +696,19 @@ function App() {
       refreshMetricsSnapshot()
     }, 450)
   }, [refreshMetricsSnapshot])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    if (showLiveStats) {
+      window.localStorage.removeItem('hok-live-stats-hidden')
+      return
+    }
+
+    window.localStorage.setItem('hok-live-stats-hidden', '1')
+  }, [showLiveStats])
 
   useEffect(() => {
     return () => {
@@ -1670,42 +1690,58 @@ function App() {
         </p>
 
         {metricsSnapshot && (
-          <section className="live-stats-strip" aria-label="Community metrics">
-            <article className="live-stat-tile">
-              <p className="live-stat-label">Site Views</p>
-              <p className="live-stat-value">{formatCompactCount(metricsSnapshot.site_views)}</p>
-            </article>
-            <article className="live-stat-tile">
-              <p className="live-stat-label">Unique Visitors</p>
-              <p className="live-stat-value">
-                {formatCompactCount(metricsSnapshot.unique_site_visitors)}
-              </p>
-            </article>
-            <article className="live-stat-tile">
-              <p className="live-stat-label">Share Links Generated</p>
-              <p className="live-stat-value">
-                {formatCompactCount(metricsSnapshot.share_links_generated)}
-              </p>
-            </article>
-            <article className="live-stat-tile">
-              <p className="live-stat-label">Share Links Visited</p>
-              <p className="live-stat-value">
-                {formatCompactCount(metricsSnapshot.share_links_visited)}
-              </p>
-            </article>
-            <article className="live-stat-tile">
-              <p className="live-stat-label">Normal Games Played</p>
-              <p className="live-stat-value">
-                {formatCompactCount(metricsSnapshot.games_played_standard)}
-              </p>
-            </article>
-            <article className="live-stat-tile">
-              <p className="live-stat-label">OST Games Played</p>
-              <p className="live-stat-value">
-                {formatCompactCount(metricsSnapshot.games_played_ost)}
-              </p>
-            </article>
-          </section>
+          <>
+            <div className="live-stats-toggle-row">
+              <p className="live-stats-toggle-note">Live Community Metrics</p>
+              <button
+                type="button"
+                className="live-stats-toggle-button"
+                onClick={() => setShowLiveStats((previous) => !previous)}
+                aria-expanded={showLiveStats}
+              >
+                {showLiveStats ? 'Hide Stats' : 'Show Stats'}
+              </button>
+            </div>
+
+            {showLiveStats && (
+              <section className="live-stats-strip" aria-label="Community metrics">
+                <article className="live-stat-tile">
+                  <p className="live-stat-label">Site Views</p>
+                  <p className="live-stat-value">{formatCompactCount(metricsSnapshot.site_views)}</p>
+                </article>
+                <article className="live-stat-tile">
+                  <p className="live-stat-label">Unique Visitors</p>
+                  <p className="live-stat-value">
+                    {formatCompactCount(metricsSnapshot.unique_site_visitors)}
+                  </p>
+                </article>
+                <article className="live-stat-tile">
+                  <p className="live-stat-label">Share Links Generated</p>
+                  <p className="live-stat-value">
+                    {formatCompactCount(metricsSnapshot.share_links_generated)}
+                  </p>
+                </article>
+                <article className="live-stat-tile">
+                  <p className="live-stat-label">Share Links Visited</p>
+                  <p className="live-stat-value">
+                    {formatCompactCount(metricsSnapshot.share_links_visited)}
+                  </p>
+                </article>
+                <article className="live-stat-tile">
+                  <p className="live-stat-label">Normal Games Played</p>
+                  <p className="live-stat-value">
+                    {formatCompactCount(metricsSnapshot.games_played_standard)}
+                  </p>
+                </article>
+                <article className="live-stat-tile">
+                  <p className="live-stat-label">OST Games Played</p>
+                  <p className="live-stat-value">
+                    {formatCompactCount(metricsSnapshot.games_played_ost)}
+                  </p>
+                </article>
+              </section>
+            )}
+          </>
         )}
 
         <div className="view-switch" role="tablist" aria-label="App sections">
