@@ -30,6 +30,103 @@ import type {
   TriviaRecord,
 } from './types'
 
+declare global {
+  interface Window {
+    YT?: {
+      Player: new (
+        element: HTMLElement,
+        config: {
+          height: string
+          width: string
+          videoId: string
+          playerVars?: Record<string, number>
+          events?: {
+            onReady?: (event: { target: YtPlayer }) => void
+            onStateChange?: (event: { data: number }) => void
+            onError?: (event: { data: number }) => void
+          }
+        },
+      ) => YtPlayer
+      PlayerState: {
+        ENDED: number
+        PLAYING: number
+        PAUSED: number
+      }
+    }
+    onYouTubeIframeAPIReady?: () => void
+    __ytIframeApiPromise?: Promise<void>
+  }
+}
+
+type YtPlayer = {
+  destroy: () => void
+  playVideo: () => void
+  pauseVideo: () => void
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void
+  getCurrentTime: () => number
+  getDuration: () => number
+}
+
+function parseYouTubeVideoId(input: string | null): string {
+  if (!input) {
+    return ''
+  }
+
+  try {
+    const parsed = new URL(input)
+
+    if (parsed.hostname === 'youtu.be') {
+      return parsed.pathname.replace('/', '')
+    }
+
+    if (parsed.searchParams.get('v')) {
+      return String(parsed.searchParams.get('v'))
+    }
+
+    const embedMatch = parsed.pathname.match(/\/embed\/([^/?]+)/i)
+    if (embedMatch?.[1]) {
+      return embedMatch[1]
+    }
+  } catch {
+    return ''
+  }
+
+  return ''
+}
+
+function formatAudioTime(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds || 0))
+  const minutes = Math.floor(safe / 60)
+  const remainder = safe % 60
+  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+}
+
+function ensureYouTubeIframeApi(): Promise<void> {
+  if (window.YT?.Player) {
+    return Promise.resolve()
+  }
+
+  if (window.__ytIframeApiPromise) {
+    return window.__ytIframeApiPromise
+  }
+
+  window.__ytIframeApiPromise = new Promise((resolve, reject) => {
+    const existing = document.getElementById('youtube-iframe-api') as HTMLScriptElement | null
+    if (!existing) {
+      const script = document.createElement('script')
+      script.id = 'youtube-iframe-api'
+      script.src = 'https://www.youtube.com/iframe_api'
+      script.async = true
+      script.onerror = () => reject(new Error('Failed to load YouTube Iframe API.'))
+      document.head.appendChild(script)
+    }
+
+    window.onYouTubeIframeAPIReady = () => resolve()
+  })
+
+  return window.__ytIframeApiPromise
+}
+
 type EndReason = 'timeout' | 'wrong-answer' | 'manual' | null
 
 interface ActiveGame {
@@ -199,6 +296,14 @@ function App() {
     null,
   )
   const feedbackTimeoutRef = useRef<number | null>(null)
+  const ytPlayerHostRef = useRef<HTMLDivElement | null>(null)
+  const ytPlayerRef = useRef<YtPlayer | null>(null)
+  const ytTickerRef = useRef<number | null>(null)
+  const [ostPlayerReady, setOstPlayerReady] = useState(false)
+  const [ostPlaying, setOstPlaying] = useState(false)
+  const [ostCurrentTime, setOstCurrentTime] = useState(0)
+  const [ostDuration, setOstDuration] = useState(0)
+  const [ostPlayerError, setOstPlayerError] = useState<string | null>(null)
 
   const hasOstTracks = OST_TRACKS.length > 0
   const targetOptions = useMemo(() => buildTargetOptions(hasOstTracks), [hasOstTracks])
@@ -226,6 +331,10 @@ function App() {
   )
   const gameStatus = game?.status ?? 'ended'
   const gameDeadlineMs = game?.deadlineMs ?? null
+  const activeOstVideoId =
+    game?.status === 'playing' && game.question.mediaType === 'audio'
+      ? parseYouTubeVideoId(game.question.audioUrl)
+      : ''
 
   useEffect(() => {
     return () => {
@@ -278,6 +387,137 @@ function App() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
+
+  useEffect(() => {
+    const shouldCleanup = !activeOstVideoId || gameStatus !== 'playing'
+    if (shouldCleanup) {
+      if (ytTickerRef.current !== null) {
+        window.clearInterval(ytTickerRef.current)
+        ytTickerRef.current = null
+      }
+
+      if (ytPlayerRef.current) {
+        ytPlayerRef.current.destroy()
+        ytPlayerRef.current = null
+      }
+      return
+    }
+
+    let cancelled = false
+
+    const setup = async () => {
+      try {
+        await ensureYouTubeIframeApi()
+
+        if (cancelled || !ytPlayerHostRef.current || !window.YT?.Player) {
+          return
+        }
+
+        if (ytPlayerRef.current) {
+          ytPlayerRef.current.destroy()
+          ytPlayerRef.current = null
+        }
+
+        setOstPlayerReady(false)
+        setOstPlaying(false)
+        setOstCurrentTime(0)
+        setOstDuration(0)
+        setOstPlayerError(null)
+
+        const player = new window.YT.Player(ytPlayerHostRef.current, {
+          height: '0',
+          width: '0',
+          videoId: activeOstVideoId,
+          playerVars: {
+            autoplay: 0,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            iv_load_policy: 3,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+          },
+          events: {
+            onReady: (event) => {
+              if (cancelled) {
+                return
+              }
+              setOstPlayerReady(true)
+              const duration = Number(event.target.getDuration?.() || 0)
+              setOstDuration(duration)
+            },
+            onStateChange: (event) => {
+              if (cancelled || !window.YT?.PlayerState) {
+                return
+              }
+
+              const isPlaying = event.data === window.YT.PlayerState.PLAYING
+              setOstPlaying(isPlaying)
+
+              if (event.data === window.YT.PlayerState.ENDED) {
+                setOstPlaying(false)
+              }
+            },
+            onError: () => {
+              if (cancelled) {
+                return
+              }
+              setOstPlayerError('Audio could not be loaded for this track.')
+            },
+          },
+        })
+
+        ytPlayerRef.current = player
+      } catch {
+        if (!cancelled) {
+          setOstPlayerError('Audio engine failed to initialize.')
+        }
+      }
+    }
+
+    setup()
+
+    return () => {
+      cancelled = true
+      if (ytTickerRef.current !== null) {
+        window.clearInterval(ytTickerRef.current)
+        ytTickerRef.current = null
+      }
+      if (ytPlayerRef.current) {
+        ytPlayerRef.current.destroy()
+        ytPlayerRef.current = null
+      }
+    }
+  }, [activeOstVideoId, gameStatus])
+
+  useEffect(() => {
+    if (!ostPlayerReady || !ytPlayerRef.current) {
+      return
+    }
+
+    ytTickerRef.current = window.setInterval(() => {
+      const player = ytPlayerRef.current
+      if (!player) {
+        return
+      }
+
+      const current = Number(player.getCurrentTime?.() || 0)
+      const duration = Number(player.getDuration?.() || 0)
+      setOstCurrentTime(current)
+
+      if (duration > 0) {
+        setOstDuration(duration)
+      }
+    }, 220)
+
+    return () => {
+      if (ytTickerRef.current !== null) {
+        window.clearInterval(ytTickerRef.current)
+        ytTickerRef.current = null
+      }
+    }
+  }, [ostPlayerReady, activeOstVideoId])
 
   const startGame = () => {
     setFeedback(null)
@@ -445,6 +685,34 @@ function App() {
         : game?.endReason === 'manual'
           ? 'Game ended by player.'
           : 'Session complete.'
+
+  const toggleOstPlayback = () => {
+    if (!ytPlayerRef.current || !ostPlayerReady) {
+      return
+    }
+
+    if (ostPlaying) {
+      ytPlayerRef.current.pauseVideo()
+      setOstPlaying(false)
+      return
+    }
+
+    ytPlayerRef.current.playVideo()
+    setOstPlaying(true)
+  }
+
+  const seekOstBy = (deltaSeconds: number) => {
+    if (!ytPlayerRef.current || !ostPlayerReady) {
+      return
+    }
+
+    const current = Number(ytPlayerRef.current.getCurrentTime?.() || 0)
+    const duration = Number(ytPlayerRef.current.getDuration?.() || 0)
+    const next = Math.max(0, Math.min(duration || current + deltaSeconds, current + deltaSeconds))
+
+    ytPlayerRef.current.seekTo(next, true)
+    setOstCurrentTime(next)
+  }
 
   return (
     <div className="app-shell">
@@ -656,34 +924,70 @@ function App() {
 
             {game.question.mediaType === 'audio' && (
               <div className="audio-stage">
-                {game.question.audioUrl ? (
-                  <iframe
-                    src={game.question.audioUrl}
-                    title={`OST player ${game.question.id}`}
-                    loading="lazy"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    referrerPolicy="strict-origin-when-cross-origin"
-                    allowFullScreen
-                  />
+                <div className="yt-audio-host" ref={ytPlayerHostRef} aria-hidden="true" />
+
+                {!showOstArtwork ? (
+                  <div className={ostPlaying ? 'wave-stage playing' : 'wave-stage'}>
+                    <div className="wave-grid">
+                      {Array.from({ length: 28 }, (_, index) => (
+                        <span
+                          key={`wave-${index}`}
+                          className="wave-bar"
+                          style={{ animationDelay: `${(index % 7) * 80}ms` }}
+                        />
+                      ))}
+                    </div>
+                    <p className="wave-title">Audio Visualizer</p>
+                  </div>
                 ) : (
-                  <p className="result-subtitle">
-                    Audio player URL missing for this track.
-                  </p>
+                  <img
+                    src={game.question.imageUrl}
+                    alt={`Track artwork prompt ${game.question.id}`}
+                    className="track-artwork"
+                  />
                 )}
+
+                <div className="audio-controls">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={!ostPlayerReady}
+                    onClick={() => seekOstBy(-5)}
+                  >
+                    -5s
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={!ostPlayerReady}
+                    onClick={toggleOstPlayback}
+                  >
+                    {ostPlaying ? 'Pause' : 'Play'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={!ostPlayerReady}
+                    onClick={() => seekOstBy(5)}
+                  >
+                    +5s
+                  </button>
+                </div>
+
+                <p className="audio-time">
+                  {formatAudioTime(ostCurrentTime)} / {formatAudioTime(ostDuration)}
+                </p>
 
                 <button
                   type="button"
                   className="ghost-button"
                   onClick={() => setShowOstArtwork((previous) => !previous)}
                 >
-                  {showOstArtwork ? 'Hide Track Artwork' : 'Show Track Artwork'}
+                  {showOstArtwork ? 'Show Sound Waves' : 'Show Track Artwork'}
                 </button>
 
-                {showOstArtwork && (
-                  <img
-                    src={game.question.imageUrl}
-                    alt={`Track artwork prompt ${game.question.id}`}
-                  />
+                {ostPlayerError && (
+                  <p className="result-subtitle setup-error">{ostPlayerError}</p>
                 )}
               </div>
             )}

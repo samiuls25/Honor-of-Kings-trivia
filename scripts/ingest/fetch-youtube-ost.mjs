@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 
 const CHANNEL_PLAYLISTS_URL = 'https://www.youtube.com/@HonorofKingsAudioTeam/playlists'
 const DEFAULT_OUTPUT = 'data/raw/hok-ost-source.json'
+const SOUNDTRACK_TOKEN = 'honor of kings original game soundtrack'
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -95,6 +96,63 @@ function textFromRuns(value) {
   return ''
 }
 
+function isWantedOstTitle(title) {
+  return String(title || '').toLowerCase().includes(SOUNDTRACK_TOKEN)
+}
+
+function stripQuery(urlValue) {
+  try {
+    const parsed = new URL(String(urlValue || ''))
+    return `${parsed.origin}${parsed.pathname}`
+  } catch {
+    return String(urlValue || '').split('?')[0]
+  }
+}
+
+async function imageExists(urlValue) {
+  try {
+    const response = await fetch(urlValue, {
+      method: 'HEAD',
+      headers: {
+        accept: 'image/*,*/*',
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135 Safari/537.36',
+      },
+    })
+
+    if (!response.ok) {
+      return false
+    }
+
+    const type = String(response.headers.get('content-type') || '')
+    return type.includes('image')
+  } catch {
+    return false
+  }
+}
+
+async function resolveBestThumbnail(videoId, fallbackUrl) {
+  const cleanFallback = stripQuery(fallbackUrl)
+  const candidates = [
+    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    cleanFallback,
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue
+    }
+
+    if (await imageExists(candidate)) {
+      return candidate
+    }
+  }
+
+  return cleanFallback
+}
+
 function pickThumbnail(value) {
   const thumbnails =
     value?.thumbnail?.thumbnails ||
@@ -178,7 +236,12 @@ function collectVideoEntries(node, entries) {
 
     const imageUrl = pickThumbnail(node)
 
-    if (title && imageUrl && !title.toLowerCase().includes('deleted video')) {
+    if (
+      title &&
+      imageUrl &&
+      !title.toLowerCase().includes('deleted video') &&
+      isWantedOstTitle(title)
+    ) {
       entries.push({
         videoId,
         title,
@@ -250,16 +313,22 @@ async function main() {
   }
 
   const tracksByVideoId = new Map()
+  const resolvedThumbnailByVideoId = new Map()
 
   for (const playlist of playlists) {
     const videos = await fetchVideosForPlaylist(playlist.playlistId)
     for (const video of videos) {
+      if (!resolvedThumbnailByVideoId.has(video.videoId)) {
+        const bestThumbnail = await resolveBestThumbnail(video.videoId, video.imageUrl)
+        resolvedThumbnailByVideoId.set(video.videoId, bestThumbnail)
+      }
+
       if (!tracksByVideoId.has(video.videoId)) {
         tracksByVideoId.set(video.videoId, {
           trackTitle: video.title,
           artistName: video.author,
           videoId: video.videoId,
-          imageUrl: video.imageUrl,
+          imageUrl: resolvedThumbnailByVideoId.get(video.videoId) || video.imageUrl,
           source: `youtube:${video.videoId}`,
         })
       }
