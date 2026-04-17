@@ -30,3 +30,11 @@ data/raw/*.json
 !data/raw/README.md
 data/processed/*.json
 !data/processed/.gitkeep
+
+# Local Netlify folder
+.netlify
+
+# Local secrets
+.env
+.env.*
+!.env.example

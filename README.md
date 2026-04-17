@@ -29,6 +29,11 @@ A fun little trivia web app for guessing heroes and skins from splash art. Test 
 - Gallery mode:
   - Separate non-game skin gallery for browsing artwork
   - Source selector (Official, qing translated, or Hybrid)
+- Sharing:
+  - Results page includes Share Challenge with setup + score encoded in URL
+  - Gallery lightbox includes Share Card for direct deep links
+  - Dynamic social preview metadata is generated at /share via Netlify Function
+  - Shared challenge links preload mode settings so friends can instantly retry
 - OST mode:
   - Embedded audio/video player for track-based questions
   - Optional artwork reveal toggle while answering
@@ -50,11 +55,38 @@ npm install
 npm run dev
 ```
 
+To test the Netlify share metadata endpoint locally (optional):
+
+1. Install Netlify CLI.
+2. Run local Netlify dev server.
+
+```bash
+npx netlify dev
+```
+
 Build production bundle:
 
 ```bash
 npm run build
 ```
+
+## Deploy notes (important)
+
+If you deploy only the `dist` folder manually, `/share` metadata links will not work because the Netlify function is outside `dist`.
+
+Use one of these deployment methods so the function is included:
+
+1. Git-connected Netlify site (recommended): Netlify builds and deploys from source.
+2. Netlify CLI deploy with functions:
+
+```bash
+npx netlify deploy --prod --dir=dist --functions=netlify/functions
+```
+
+Function and routing files:
+
+- `netlify/functions/share.js`
+- `netlify.toml`
 
 ## Real data ingestion workflow
 

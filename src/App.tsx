@@ -154,6 +154,15 @@ interface Option<TValue extends string> {
 
 type ViewMode = 'play' | 'gallery'
 const WAVE_BARS = 40
+const APP_VERSION_LABEL = 'V1.2'
+
+type SharedChallenge = {
+  config: GameConfig
+  score: number
+  correct: number
+  wrong: number
+  bestStreak: number
+}
 
 type WaveProfile = {
   bpm: number
@@ -187,6 +196,66 @@ function createWaveProfile(videoId: string): WaveProfile {
 
 function createInitialWaveHeights() {
   return Array.from({ length: WAVE_BARS }, () => 0.18 + Math.random() * 0.46)
+}
+
+function isGuessTarget(value: string | null): value is GuessTarget {
+  return value === 'hero-name' || value === 'skin-name' || value === 'ost-title'
+}
+
+function isSkinDataSource(value: string | null): value is SkinDataSource {
+  return value === 'official' || value === 'qing-en' || value === 'hybrid'
+}
+
+function isAnswerMode(value: string | null): value is AnswerMode {
+  return value === 'typed' || value === 'multiple-choice'
+}
+
+function isScoringStyle(value: string | null): value is ScoringStyle {
+  return (
+    value === 'five-minute-easy' ||
+    value === 'five-minute-hard' ||
+    value === 'sudden-death'
+  )
+}
+
+function parseNonNegativeInt(value: string | null): number {
+  if (!value) {
+    return 0
+  }
+
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0
+  }
+
+  return parsed
+}
+
+function buildAbsoluteUrl(pathname: string, params: URLSearchParams): string {
+  const query = params.toString()
+  const nextPath = query ? `${pathname}?${query}` : pathname
+  return `${window.location.origin}${nextPath}`
+}
+
+function findSkinById(
+  skinId: string,
+): { skin: SkinRecord; source: SkinDataSource } | null {
+  const official = SKINS_OFFICIAL.find((skin) => skin.id === skinId)
+  if (official) {
+    return { skin: official, source: 'official' }
+  }
+
+  const qing = SKINS_QING.find((skin) => skin.id === skinId)
+  if (qing) {
+    return { skin: qing, source: 'qing-en' }
+  }
+
+  const hybrid = SKINS_HYBRID.find((skin) => skin.id === skinId)
+  if (hybrid) {
+    return { skin: hybrid, source: 'hybrid' }
+  }
+
+  return null
 }
 
 function gaussianPulse(position: number, center: number, width: number): number {
@@ -252,14 +321,14 @@ const skinSourceOptions: Option<SkinDataSource>[] = [
 
 const answerModeOptions: Option<AnswerMode>[] = [
   {
-    value: 'typed',
-    label: 'Typed Entry',
-    description: 'Type your guess and submit. Answers are case-insensitive.',
-  },
-  {
     value: 'multiple-choice',
     label: 'Multiple Choice',
     description: 'Pick one option from four possible answers.',
+  },
+  {
+    value: 'typed',
+    label: 'Typed Entry',
+    description: 'Type your guess and submit. Answers are case-insensitive.',
   },
 ]
 
@@ -286,6 +355,88 @@ const defaultConfig: GameConfig = {
   skinSource: 'official',
   answerMode: 'multiple-choice',
   scoringStyle: 'five-minute-easy',
+}
+
+type InitialRouteState = {
+  viewMode: ViewMode
+  config: GameConfig
+  incomingChallenge: SharedChallenge | null
+  selectedGallerySkin: SkinRecord | null
+}
+
+function resolveInitialRouteState(): InitialRouteState {
+  const params = new URLSearchParams(window.location.search)
+  const requestedView = params.get('view')
+
+  if (requestedView === 'gallery') {
+    const linkedSkinId = params.get('skin')
+    const linkedSource = params.get('source')
+
+    if (linkedSkinId) {
+      const resolved = findSkinById(linkedSkinId)
+      if (resolved) {
+        return {
+          viewMode: 'gallery',
+          config: {
+            ...defaultConfig,
+            skinSource: resolved.source,
+          },
+          incomingChallenge: null,
+          selectedGallerySkin: resolved.skin,
+        }
+      }
+    }
+
+    return {
+      viewMode: 'gallery',
+      config: {
+        ...defaultConfig,
+        skinSource: isSkinDataSource(linkedSource)
+          ? linkedSource
+          : defaultConfig.skinSource,
+      },
+      incomingChallenge: null,
+      selectedGallerySkin: null,
+    }
+  }
+
+  if (params.get('challenge') === '1') {
+    const targetParam = params.get('target')
+    const sourceParam = params.get('source')
+    const answerParam = params.get('answer')
+    const scoringParam = params.get('scoring')
+
+    const challengeConfig: GameConfig = {
+      target: isGuessTarget(targetParam) ? targetParam : defaultConfig.target,
+      skinSource: isSkinDataSource(sourceParam)
+        ? sourceParam
+        : defaultConfig.skinSource,
+      answerMode: isAnswerMode(answerParam) ? answerParam : defaultConfig.answerMode,
+      scoringStyle: isScoringStyle(scoringParam)
+        ? scoringParam
+        : defaultConfig.scoringStyle,
+    }
+
+    return {
+      viewMode: 'play',
+      config: challengeConfig,
+      incomingChallenge: {
+        config: challengeConfig,
+        score: parseNonNegativeInt(params.get('score')),
+        correct: parseNonNegativeInt(params.get('correct')),
+        wrong: parseNonNegativeInt(params.get('wrong')),
+        bestStreak: parseNonNegativeInt(params.get('best')),
+      },
+      selectedGallerySkin: null,
+    }
+  }
+
+  return {
+    viewMode: 'play',
+    config: defaultConfig,
+    incomingChallenge: null,
+    selectedGallerySkin: null,
+  }
 }
 
 function getModeLabel<TValue extends string>(
@@ -340,15 +491,16 @@ function buildInitialGame(config: GameConfig): ActiveGame {
 }
 
 function App() {
-  const [viewMode, setViewMode] = useState<ViewMode>('play')
-  const [config, setConfig] = useState<GameConfig>(defaultConfig)
+  const initialRouteState = useMemo(() => resolveInitialRouteState(), [])
+  const [viewMode, setViewMode] = useState<ViewMode>(initialRouteState.viewMode)
+  const [config, setConfig] = useState<GameConfig>(initialRouteState.config)
   const [game, setGame] = useState<ActiveGame | null>(null)
   const [typedGuess, setTypedGuess] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [showOstArtwork, setShowOstArtwork] = useState(false)
   const [selectedGallerySkin, setSelectedGallerySkin] = useState<SkinRecord | null>(
-    null,
+    initialRouteState.selectedGallerySkin,
   )
   const [waveHeights, setWaveHeights] = useState<number[]>(() =>
     createInitialWaveHeights(),
@@ -364,6 +516,10 @@ function App() {
   const [ostCurrentTime, setOstCurrentTime] = useState(0)
   const [ostDuration, setOstDuration] = useState(0)
   const [ostPlayerError, setOstPlayerError] = useState<string | null>(null)
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null)
+  const [incomingChallenge] = useState<SharedChallenge | null>(
+    initialRouteState.incomingChallenge,
+  )
 
   const hasOstTracks = OST_TRACKS.length > 0
   const targetOptions = useMemo(() => buildTargetOptions(hasOstTracks), [hasOstTracks])
@@ -395,6 +551,25 @@ function App() {
     game?.status === 'playing' && game.question.mediaType === 'audio'
       ? parseYouTubeVideoId(game.question.audioUrl)
       : ''
+
+  const replaceUrlParams = (updater: (params: URLSearchParams) => void) => {
+    const params = new URLSearchParams(window.location.search)
+    updater(params)
+    const query = params.toString()
+    const nextPath = query ? `${window.location.pathname}?${query}` : window.location.pathname
+    window.history.replaceState(null, '', nextPath)
+  }
+
+  const clearShareFeedbackSoon = () => {
+    window.setTimeout(() => {
+      setShareFeedback((previous) => {
+        if (!previous) {
+          return previous
+        }
+        return null
+      })
+    }, 2800)
+  }
 
   useEffect(() => {
     return () => {
@@ -441,6 +616,11 @@ function App() {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setSelectedGallerySkin(null)
+        const params = new URLSearchParams(window.location.search)
+        params.delete('skin')
+        const query = params.toString()
+        const nextPath = query ? `${window.location.pathname}?${query}` : window.location.pathname
+        window.history.replaceState(null, '', nextPath)
       }
     }
 
@@ -649,9 +829,129 @@ function App() {
     }
   }, [ostPlaying, activeOstVideoId])
 
+  const copyTextToClipboard = async (text: string): Promise<boolean> => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+
+    const fallbackInput = document.createElement('textarea')
+    fallbackInput.value = text
+    fallbackInput.setAttribute('readonly', 'true')
+    fallbackInput.style.position = 'fixed'
+    fallbackInput.style.opacity = '0'
+    document.body.appendChild(fallbackInput)
+    fallbackInput.focus()
+    fallbackInput.select()
+
+    try {
+      const success = document.execCommand('copy')
+      document.body.removeChild(fallbackInput)
+      return success
+    } catch {
+      document.body.removeChild(fallbackInput)
+      return false
+    }
+  }
+
+  const buildChallengeShareUrl = (endedGame: ActiveGame): string => {
+    const params = new URLSearchParams()
+    params.set('view', 'play')
+    params.set('challenge', '1')
+    params.set('target', endedGame.config.target)
+    params.set('source', endedGame.config.skinSource)
+    params.set('answer', endedGame.config.answerMode)
+    params.set('scoring', endedGame.config.scoringStyle)
+    params.set('score', String(endedGame.score))
+    params.set('correct', String(endedGame.correct))
+    params.set('wrong', String(endedGame.wrong))
+    params.set('best', String(endedGame.bestStreak))
+    return buildAbsoluteUrl('/share', params)
+  }
+
+  const buildGalleryShareUrl = (skin: SkinRecord): string => {
+    const params = new URLSearchParams()
+    params.set('view', 'gallery')
+    params.set('source', config.skinSource)
+    params.set('skin', skin.id)
+    params.set('skinName', skin.skinName)
+    params.set('heroName', skin.heroName)
+    params.set('image', skin.imageUrl)
+    return buildAbsoluteUrl('/share', params)
+  }
+
+  const shareResults = async () => {
+    if (!game || game.status !== 'ended') {
+      return
+    }
+
+    const shareUrl = buildChallengeShareUrl(game)
+    const modeSummary = [
+      getModeLabel(targetOptions, game.config.target),
+      game.config.target === 'ost-title'
+        ? null
+        : getModeLabel(skinSourceOptions, game.config.skinSource),
+      getModeLabel(answerModeOptions, game.config.answerMode),
+      getModeLabel(scoringOptions, game.config.scoringStyle),
+    ]
+      .filter(Boolean)
+      .join(' | ')
+
+    const shareText =
+      `I scored ${game.score} in Honor of Kings Trivia ` +
+      `(${game.correct} correct, ${game.wrong} wrong, best streak ${game.bestStreak}). ` +
+      `Mode: ${modeSummary}. Can you beat this challenge?`
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Honor of Kings Trivia Challenge',
+          text: shareText,
+          url: shareUrl,
+        })
+        setShareFeedback('Challenge share opened.')
+      } else {
+        const copied = await copyTextToClipboard(`${shareText} ${shareUrl}`)
+        setShareFeedback(copied ? 'Challenge link copied.' : 'Could not copy challenge link.')
+      }
+    } catch {
+      const copied = await copyTextToClipboard(`${shareText} ${shareUrl}`)
+      setShareFeedback(copied ? 'Challenge link copied.' : 'Could not share this challenge.')
+    }
+
+    clearShareFeedbackSoon()
+  }
+
+  const shareGalleryCard = async (skin: SkinRecord) => {
+    const shareUrl = buildGalleryShareUrl(skin)
+    const shareText =
+      `${skin.skinName} (${skin.heroName}) in Honor of Kings Trivia gallery. ` +
+      'Open this link to jump directly to the card.'
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${skin.skinName} • Honor of Kings Trivia`,
+          text: shareText,
+          url: shareUrl,
+        })
+        setShareFeedback('Gallery share opened.')
+      } else {
+        const copied = await copyTextToClipboard(`${shareText} ${shareUrl}`)
+        setShareFeedback(copied ? 'Gallery link copied.' : 'Could not copy gallery link.')
+      }
+    } catch {
+      const copied = await copyTextToClipboard(`${shareText} ${shareUrl}`)
+      setShareFeedback(copied ? 'Gallery link copied.' : 'Could not share gallery card.')
+    }
+
+    clearShareFeedbackSoon()
+  }
+
   const startGame = () => {
     setFeedback(null)
     setSetupError(null)
+    setShareFeedback(null)
     setTypedGuess('')
     setShowOstArtwork(false)
 
@@ -675,6 +975,7 @@ function App() {
     }
     setFeedback(null)
     setSetupError(null)
+    setShareFeedback(null)
     setTypedGuess('')
     setConfig(game.config)
     setShowOstArtwork(false)
@@ -712,14 +1013,43 @@ function App() {
     setGame(null)
     setFeedback(null)
     setSetupError(null)
+    setShareFeedback(null)
     setTypedGuess('')
     setSelectedGallerySkin(null)
+
+    replaceUrlParams((params) => {
+      params.set('view', 'gallery')
+      params.set('source', config.skinSource)
+      params.delete('skin')
+      params.delete('challenge')
+      params.delete('target')
+      params.delete('answer')
+      params.delete('scoring')
+      params.delete('score')
+      params.delete('correct')
+      params.delete('wrong')
+      params.delete('best')
+    })
   }
 
   const openPlay = () => {
     setViewMode('play')
     setSetupError(null)
+    setShareFeedback(null)
     setSelectedGallerySkin(null)
+
+    replaceUrlParams((params) => {
+      params.set('view', 'play')
+      params.delete('source')
+      params.delete('skin')
+    })
+  }
+
+  const closeGalleryLightbox = () => {
+    setSelectedGallerySkin(null)
+    replaceUrlParams((params) => {
+      params.delete('skin')
+    })
   }
 
   const submitAnswer = (rawGuess: string) => {
@@ -847,11 +1177,11 @@ function App() {
   return (
     <div className="app-shell">
       <header className="masthead">
-        <p className="eyebrow">V1.0</p>
+        <p className="eyebrow">{APP_VERSION_LABEL}</p>
         <h1>Honor of Kings Trivia</h1>
         <p className="lede">
-          Guess heroes or skin names from the displayed art. Mix input mode,
-          category mode, and scoring style for different challenge paths!
+          Master hero, skin, and OST trivia, then drop shareable challenge links
+          and gallery cards to see who really deserves the Honor of Kings.
         </p>
 
         <div className="view-switch" role="tablist" aria-label="App sections">
@@ -890,6 +1220,17 @@ function App() {
       {viewMode === 'play' && !game && (
         <section className="panel">
           <h2>Game Setup</h2>
+
+          {incomingChallenge && (
+            <div className="share-highlight" role="status">
+              <p className="share-highlight-kicker">Shared Challenge</p>
+              <p className="share-highlight-title">Can you beat this run?</p>
+              <p className="share-highlight-meta">
+                Score {incomingChallenge.score}, {incomingChallenge.correct} correct,{' '}
+                {incomingChallenge.wrong} wrong, best streak {incomingChallenge.bestStreak}
+              </p>
+            </div>
+          )}
 
           <div className="setting-group">
             <h3>Question Target</h3>
@@ -1021,6 +1362,7 @@ function App() {
           </div>
 
           {setupError && <p className="result-subtitle setup-error">{setupError}</p>}
+          {shareFeedback && <p className="result-subtitle">{shareFeedback}</p>}
         </section>
       )}
 
@@ -1221,17 +1563,27 @@ function App() {
             <button className="primary-button" onClick={startGameFromPreviousConfig}>
               Play Again
             </button>
+            <button className="share-button" onClick={shareResults}>
+              Share Challenge
+            </button>
             <button
               className="ghost-button"
               onClick={() => {
                 setGame(null)
                 setFeedback(null)
                 setTypedGuess('')
+                setShareFeedback(null)
+                replaceUrlParams((params) => {
+                  params.set('view', 'play')
+                  params.delete('source')
+                  params.delete('skin')
+                })
               }}
             >
               Change Modes
             </button>
           </div>
+          {shareFeedback && <p className="result-subtitle">{shareFeedback}</p>}
         </section>
       )}
 
@@ -1244,6 +1596,7 @@ function App() {
             </p>
             <div className="chip">Items: {gallerySkins.length}</div>
           </div>
+          {shareFeedback && <p className="result-subtitle">{shareFeedback}</p>}
 
           <div className="option-grid">
             {skinSourceOptions.map((option) => (
@@ -1255,12 +1608,18 @@ function App() {
                     ? 'option-card active'
                     : 'option-card'
                 }
-                onClick={() =>
+                onClick={() => {
                   setConfig((previous) => ({
                     ...previous,
                     skinSource: option.value,
                   }))
-                }
+                  setSelectedGallerySkin(null)
+                  replaceUrlParams((params) => {
+                    params.set('view', 'gallery')
+                    params.set('source', option.value)
+                    params.delete('skin')
+                  })
+                }}
               >
                 <span className="title">{option.label}</span>
                 <span className="description">
@@ -1276,7 +1635,14 @@ function App() {
                 <button
                   type="button"
                   className="gallery-card-button"
-                  onClick={() => setSelectedGallerySkin(skin)}
+                  onClick={() => {
+                    setSelectedGallerySkin(skin)
+                    replaceUrlParams((params) => {
+                      params.set('view', 'gallery')
+                      params.set('source', config.skinSource)
+                      params.set('skin', skin.id)
+                    })
+                  }}
                 >
                   <img
                     src={skin.imageUrl}
@@ -1300,19 +1666,28 @@ function App() {
           role="dialog"
           aria-modal="true"
           aria-label="Skin preview"
-          onClick={() => setSelectedGallerySkin(null)}
+          onClick={closeGalleryLightbox}
         >
           <div
             className="gallery-lightbox-card"
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              className="gallery-lightbox-close"
-              onClick={() => setSelectedGallerySkin(null)}
-            >
-              Close
-            </button>
+            <div className="gallery-lightbox-actions">
+              <button
+                type="button"
+                className="share-button"
+                onClick={() => shareGalleryCard(selectedGallerySkin)}
+              >
+                Share Card
+              </button>
+              <button
+                type="button"
+                className="gallery-lightbox-close"
+                onClick={closeGalleryLightbox}
+              >
+                Close
+              </button>
+            </div>
             <img
               src={selectedGallerySkin.imageUrl}
               alt={`${selectedGallerySkin.heroName} - ${selectedGallerySkin.skinName}`}
