@@ -153,6 +153,11 @@ interface Option<TValue extends string> {
 }
 
 type ViewMode = 'play' | 'gallery'
+const WAVE_BARS = 40
+
+function createInitialWaveHeights() {
+  return Array.from({ length: WAVE_BARS }, () => 0.18 + Math.random() * 0.46)
+}
 
 function buildTargetOptions(hasOstTracks: boolean): Option<GuessTarget>[] {
   return [
@@ -295,10 +300,14 @@ function App() {
   const [selectedGallerySkin, setSelectedGallerySkin] = useState<SkinRecord | null>(
     null,
   )
+  const [waveHeights, setWaveHeights] = useState<number[]>(() =>
+    createInitialWaveHeights(),
+  )
   const feedbackTimeoutRef = useRef<number | null>(null)
   const ytPlayerHostRef = useRef<HTMLDivElement | null>(null)
   const ytPlayerRef = useRef<YtPlayer | null>(null)
   const ytTickerRef = useRef<number | null>(null)
+  const waveTickerRef = useRef<number | null>(null)
   const [ostPlayerReady, setOstPlayerReady] = useState(false)
   const [ostPlaying, setOstPlaying] = useState(false)
   const [ostCurrentTime, setOstCurrentTime] = useState(0)
@@ -400,6 +409,11 @@ function App() {
         ytPlayerRef.current.destroy()
         ytPlayerRef.current = null
       }
+
+      if (waveTickerRef.current !== null) {
+        window.clearInterval(waveTickerRef.current)
+        waveTickerRef.current = null
+      }
       return
     }
 
@@ -423,6 +437,7 @@ function App() {
         setOstCurrentTime(0)
         setOstDuration(0)
         setOstPlayerError(null)
+        setWaveHeights(createInitialWaveHeights())
 
         const player = new window.YT.Player(ytPlayerHostRef.current, {
           height: '0',
@@ -488,6 +503,11 @@ function App() {
         ytPlayerRef.current.destroy()
         ytPlayerRef.current = null
       }
+
+      if (waveTickerRef.current !== null) {
+        window.clearInterval(waveTickerRef.current)
+        waveTickerRef.current = null
+      }
     }
   }, [activeOstVideoId, gameStatus])
 
@@ -518,6 +538,35 @@ function App() {
       }
     }
   }, [ostPlayerReady, activeOstVideoId])
+
+  useEffect(() => {
+    if (!ostPlaying || !ytPlayerRef.current) {
+      return
+    }
+
+    waveTickerRef.current = window.setInterval(() => {
+      const anchor = Number(ytPlayerRef.current?.getCurrentTime?.() || 0)
+
+      setWaveHeights((previous) =>
+        previous.map((current, index) => {
+          const harmonic = Math.abs(
+            Math.sin(anchor * (1.2 + (index % 5) * 0.13) + index * 0.52),
+          )
+          const jitter = Math.random() * 0.22
+          const target = 0.14 + harmonic * 0.72 + jitter
+          const next = current * 0.34 + target * 0.66
+          return Math.max(0.08, Math.min(0.98, next))
+        }),
+      )
+    }, 140)
+
+    return () => {
+      if (waveTickerRef.current !== null) {
+        window.clearInterval(waveTickerRef.current)
+        waveTickerRef.current = null
+      }
+    }
+  }, [ostPlaying, activeOstVideoId])
 
   const startGame = () => {
     setFeedback(null)
@@ -789,6 +838,9 @@ function App() {
                     })
                   }
                 >
+                  {option.value === 'ost-title' && (
+                    <span className="ost-chip">Audio Challenge</span>
+                  )}
                   <span className="title">{option.label}</span>
                   <span className="description">{option.description}</span>
                 </button>
@@ -929,11 +981,11 @@ function App() {
                 {!showOstArtwork ? (
                   <div className={ostPlaying ? 'wave-stage playing' : 'wave-stage'}>
                     <div className="wave-grid">
-                      {Array.from({ length: 28 }, (_, index) => (
+                      {waveHeights.map((height, index) => (
                         <span
                           key={`wave-${index}`}
                           className="wave-bar"
-                          style={{ animationDelay: `${(index % 7) * 80}ms` }}
+                          style={{ height: `${Math.round(height * 100)}%` }}
                         />
                       ))}
                     </div>

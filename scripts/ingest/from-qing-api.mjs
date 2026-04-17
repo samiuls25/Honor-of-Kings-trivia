@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 const DEFAULT_ENDPOINT = 'https://qing762.is-a.dev/api/wangzhe'
+const DEFAULT_HEROLIST_ENDPOINT = 'https://pvp.qq.com/web201605/js/herolist.json'
 
 function toSlug(value) {
   return String(value)
@@ -80,6 +81,16 @@ function parseHeroId(hero) {
   return toSlug(toCleanString(hero.name) || 'hero')
 }
 
+function parseHeroSlug(hero) {
+  const urlValue = toCleanString(hero.url)
+  if (!urlValue) {
+    return ''
+  }
+
+  const match = urlValue.match(/\/herodetail\/([^./]+)\./i)
+  return match?.[1] ? toSlug(match[1]) : ''
+}
+
 function looksMostlyEnglish(value) {
   return /[a-z]/i.test(value)
 }
@@ -100,11 +111,61 @@ function getHeroObjects(payload) {
   return Object.values(container)
 }
 
-function normalizeSkinRecords(heroes, source) {
+function buildBigSkinUrl(heroNumericId, skinNumber) {
+  return `https://game.gtimg.cn/images/yxzj/img201606/skin/hero-info/${heroNumericId}/${heroNumericId}-bigskin-${skinNumber}.jpg`
+}
+
+async function fetchHeroNumericMap() {
+  const response = await fetch(DEFAULT_HEROLIST_ENDPOINT)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch official hero map: HTTP ${response.status}`)
+  }
+
+  const payload = await response.json()
+  const map = new Map()
+
+  for (const row of payload) {
+    const slug = toCleanString(row?.id_name)
+    const numeric = Number(row?.ename)
+    if (!slug || !Number.isFinite(numeric) || numeric <= 0) {
+      continue
+    }
+    map.set(toSlug(slug), numeric)
+  }
+
+  return map
+}
+
+async function urlExists(url, cache) {
+  if (cache.has(url)) {
+    return cache.get(url)
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      headers: {
+        accept: 'image/*,*/*',
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135 Safari/537.36',
+      },
+    })
+
+    const exists = response.ok
+    cache.set(url, exists)
+    return exists
+  } catch {
+    cache.set(url, false)
+    return false
+  }
+}
+
+async function normalizeSkinRecords(heroes, source, heroNumericBySlug) {
   const records = []
   const seenIds = new Set()
   let heroesWithoutSkins = 0
   let nonEnglishRows = 0
+  const headCache = new Map()
 
   for (const hero of heroes) {
     if (!hero || typeof hero !== 'object') {
@@ -114,6 +175,8 @@ function normalizeSkinRecords(heroes, source) {
     const heroName = toCleanString(hero.name)
     const heroAlias = toCleanString(hero.title)
     const heroId = parseHeroId(hero)
+    const heroSlug = parseHeroSlug(hero) || heroId
+    const heroNumericId = heroNumericBySlug.get(heroSlug)
     const skins = Array.isArray(hero.skins) ? hero.skins : []
 
     if (skins.length === 0) {
@@ -127,7 +190,20 @@ function normalizeSkinRecords(heroes, source) {
       }
 
       const skinName = toCleanString(skin.skinName || skin.name)
-      const imageUrl = absolutizeImage(toCleanString(skin.skinImg || skin.image || skin.img))
+      const fallbackImageUrl = absolutizeImage(
+        toCleanString(skin.skinImg || skin.image || skin.img),
+      )
+
+      const bigSkinUrl = heroNumericId
+        ? buildBigSkinUrl(heroNumericId, skinIndex + 1)
+        : ''
+
+      let imageUrl = fallbackImageUrl
+      if (bigSkinUrl) {
+        if (await urlExists(bigSkinUrl, headCache)) {
+          imageUrl = bigSkinUrl
+        }
+      }
 
       if (!heroName || !skinName || !imageUrl) {
         continue
@@ -188,12 +264,17 @@ async function main() {
 
   const payload = await response.json()
   const heroes = getHeroObjects(payload)
+  const heroNumericBySlug = await fetchHeroNumericMap()
 
   if (heroes.length === 0) {
     throw new Error('No hero payloads found in qing source.')
   }
 
-  const { records, quality } = normalizeSkinRecords(heroes, endpoint)
+  const { records, quality } = await normalizeSkinRecords(
+    heroes,
+    endpoint,
+    heroNumericBySlug,
+  )
 
   if (records.length === 0) {
     throw new Error('No usable skin records extracted from qing source.')
