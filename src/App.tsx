@@ -155,8 +155,58 @@ interface Option<TValue extends string> {
 type ViewMode = 'play' | 'gallery'
 const WAVE_BARS = 40
 
+type WaveProfile = {
+  bpm: number
+  phase: number
+  accents: number[]
+}
+
+function hashString(input: string): number {
+  let hash = 0
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash << 5) - hash + input.charCodeAt(index)
+    hash |= 0
+  }
+  return Math.abs(hash)
+}
+
+function createWaveProfile(videoId: string): WaveProfile {
+  const hash = hashString(videoId || 'default-track')
+  const bpm = 96 + (hash % 52)
+  const phase = ((hash % 1000) / 1000) * Math.PI * 2
+  const accents = Array.from({ length: 8 }, (_, index) =>
+    0.82 + (((hash >> (index + 1)) & 7) / 7) * 0.38,
+  )
+
+  return {
+    bpm,
+    phase,
+    accents,
+  }
+}
+
 function createInitialWaveHeights() {
   return Array.from({ length: WAVE_BARS }, () => 0.18 + Math.random() * 0.46)
+}
+
+function gaussianPulse(position: number, center: number, width: number): number {
+  const delta = position - center
+  return Math.exp(-(delta * delta) / (2 * width * width))
+}
+
+function waveZoneClass(index: number): 'wave-bar bass' | 'wave-bar mid' | 'wave-bar treble' {
+  const normalized = index / (WAVE_BARS - 1)
+  const centerDistance = Math.abs(normalized * 2 - 1)
+
+  if (centerDistance < 0.28) {
+    return 'wave-bar bass'
+  }
+
+  if (centerDistance < 0.62) {
+    return 'wave-bar mid'
+  }
+
+  return 'wave-bar treble'
 }
 
 function buildTargetOptions(hasOstTracks: boolean): Option<GuessTarget>[] {
@@ -308,6 +358,7 @@ function App() {
   const ytPlayerRef = useRef<YtPlayer | null>(null)
   const ytTickerRef = useRef<number | null>(null)
   const waveTickerRef = useRef<number | null>(null)
+  const waveProfileRef = useRef<WaveProfile>(createWaveProfile('default-track'))
   const [ostPlayerReady, setOstPlayerReady] = useState(false)
   const [ostPlaying, setOstPlaying] = useState(false)
   const [ostCurrentTime, setOstCurrentTime] = useState(0)
@@ -437,6 +488,7 @@ function App() {
         setOstCurrentTime(0)
         setOstDuration(0)
         setOstPlayerError(null)
+        waveProfileRef.current = createWaveProfile(activeOstVideoId)
         setWaveHeights(createInitialWaveHeights())
 
         const player = new window.YT.Player(ytPlayerHostRef.current, {
@@ -546,15 +598,44 @@ function App() {
 
     waveTickerRef.current = window.setInterval(() => {
       const anchor = Number(ytPlayerRef.current?.getCurrentTime?.() || 0)
+      const profile = waveProfileRef.current
+
+      const beatPosition = ((anchor * profile.bpm) / 60 + profile.phase / (Math.PI * 2)) % 1
+      const kick = gaussianPulse(beatPosition, 0.08, 0.08)
+      const offKick = gaussianPulse(beatPosition, 0.58, 0.11)
+      const beatEnergy = Math.min(1.2, kick + offKick * 0.75)
 
       setWaveHeights((previous) =>
         previous.map((current, index) => {
-          const harmonic = Math.abs(
-            Math.sin(anchor * (1.2 + (index % 5) * 0.13) + index * 0.52),
-          )
-          const jitter = Math.random() * 0.22
-          const target = 0.14 + harmonic * 0.72 + jitter
-          const next = current * 0.34 + target * 0.66
+          const normalized = index / (WAVE_BARS - 1)
+          const centerDistance = Math.abs(normalized * 2 - 1)
+
+          const bassWeight = Math.max(0, 1 - centerDistance * 1.65)
+          const midWeight = Math.max(0, 1 - Math.abs(centerDistance - 0.45) * 2.25)
+          const trebleWeight = Math.max(0, centerDistance * 1.2 - 0.15)
+
+          const harmonic =
+            0.5 +
+            0.5 *
+              Math.sin(
+                anchor * (1.4 + trebleWeight * 2.2 + (index % 4) * 0.09) +
+                  index * 0.45 +
+                  profile.phase,
+              )
+
+          const shimmer =
+            0.5 +
+            0.5 * Math.sin(anchor * 6.5 + index * 1.17 + profile.phase * 0.6)
+
+          const accent = profile.accents[index % profile.accents.length]
+
+          const target =
+            0.1 +
+            bassWeight * (0.22 + beatEnergy * 0.62) +
+            midWeight * (0.14 + harmonic * 0.34) +
+            trebleWeight * (0.08 + shimmer * 0.28)
+
+          const next = current * 0.46 + target * accent * 0.54
           return Math.max(0.08, Math.min(0.98, next))
         }),
       )
@@ -986,11 +1067,11 @@ function App() {
                           waveHeights[index] ?? 0.18 + ((index % 7) / 7) * 0.58
 
                         return (
-                        <span
-                          key={`wave-${index}`}
-                          className="wave-bar"
-                          style={{ height: `${Math.round(height * 100)}%` }}
-                        />
+                            <span
+                              key={`wave-${index}`}
+                              className={waveZoneClass(index)}
+                              style={{ height: `${Math.round(height * 100)}%` }}
+                            />
                         )
                       })}
                     </div>
