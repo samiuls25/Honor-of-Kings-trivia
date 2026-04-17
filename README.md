@@ -1,33 +1,60 @@
 # Honor of Kings Skin Trivia
 
-A fun little trivia web app for guessing heroes and skins from splash art, or guessing OST track titles from audio! Test your knowledge or just enjoy the artwork. Share your score with friends or share specific gallery artwork you like. Play the game here: https://hoktrivia.netlify.app/
+A fun little trivia web app for guessing heroes and skins from splash art, or guessing OST track titles from audio! Test your knowledge or just enjoy the artwork and OSTs. Share your score with friends or share specific gallery artwork and OSTs you like. Play the game here: https://hoktrivia.netlify.app/
+
 
 ## Release Highlights
 
-- V1.0.X: Initial launch with hero/skin trivia core loop, timer-based runs, official capture ingestion pipeline, and score tracking.
-- V1.1.X: Added Skin Gallery mode for standalone artwork browsing outside active trivia rounds.
-- V1.2.X: Introduced OST Trivia Mode (waveform and track card display options) and OST ingestion pipeline. Added source-isolated/selectable data pipelines (newly integrated and polished data from qing api, official capture, hybrid). Expanded Gallery Mode with clickable cards for full high definition picture view. Selectable skin sources/hybrid mode and OST visualizer polish. Expanded sharing with challenge and gallery deep links plus social-preview metadata support.
-- V1.3.X: Introduced the all-new OST Hall with soundtrack browsing, scrubber seeking, and shareable track links. Optimized qing api data loading performance. OST Hall UX polish (scroll-to-player/selection clarity).
+- **V1.3.X**: Introduced the all-new OST Hall with soundtrack browsing, scrubber seeking, and shareable track links. Optimized qing api data loading performance. OST Hall UX polish (scroll-to-player/selection clarity).
+- **V1.2.X**: Introduced OST Trivia Mode (waveform and track card display options) and OST ingestion pipeline. Added source-isolated/selectable data pipelines (newly integrated and polished data from qing api, official capture, hybrid). Expanded Gallery Mode with clickable cards for full high definition picture view. Selectable skin sources/hybrid mode and OST visualizer polish. Expanded sharing with challenge and gallery deep links plus social-preview metadata support.
+- **V1.1.X**: Added Skin Gallery mode for standalone artwork browsing outside active trivia rounds.
+- **V1.0.X**: Initial launch with hero/skin trivia core loop, timer-based runs, official capture ingestion pipeline, and score tracking.
+
 
 ## Visuals: Game/Gallery/OST Hall
+
 ### Trivia Mode Home Page
-<img width="1903" height="943" alt="image" src="https://github.com/user-attachments/assets/fb5e50ad-450b-47dc-ba69-2a0cf3f4f59a" />
+<img width="1902" height="941" alt="image" src="https://github.com/user-attachments/assets/dfd52c9f-8bca-4d23-9bc4-21039b64bf74" />
+
 
 ### Trivia Mode Game Page
 <img width="1900" height="936" alt="image" src="https://github.com/user-attachments/assets/d112cb2a-6d27-4f64-be04-2f82f954db93" />
 
-### Gallery Mode
-<img width="1901" height="938" alt="image" src="https://github.com/user-attachments/assets/cd785275-c8da-4d48-bc29-6364a8f8946f" />
 
-### Audio Trivia Mode
+### Audio Trivia Mode Game Page
 #### Sound Waves
-<img width="1900" height="936" alt="image" src="https://github.com/user-attachments/assets/e0d29341-c3a6-4b06-b149-236df7446223" />
+<img width="1901" height="940" alt="image" src="https://github.com/user-attachments/assets/8dd191e4-f0d5-4d65-8282-e34215b3b799" />
 
 #### Track Artwork
-<img width="1901" height="938" alt="image" src="https://github.com/user-attachments/assets/b3ecdd31-5b82-40c5-bc88-03035cebadd8" />
+<img width="1902" height="940" alt="image" src="https://github.com/user-attachments/assets/c17ca858-d347-4a8e-98d9-e7d9e3797b41" />
 
-### Share Links Example
-<img width="1197" height="551" alt="image" src="https://github.com/user-attachments/assets/ae250de5-4b3a-434f-9d35-8e95de8d07ff" />
+
+### Gallery Mode
+#### Main Gallery
+<img width="1902" height="941" alt="image" src="https://github.com/user-attachments/assets/5b221e84-5291-47b7-9e89-30285e87a540" />
+
+#### Gallery Card
+<img width="1902" height="938" alt="image" src="https://github.com/user-attachments/assets/d30f81c0-a18b-493a-bc5c-33aeec9f8a52" />
+
+
+### OST Hall
+#### Main Audio Player
+<img width="1901" height="940" alt="image" src="https://github.com/user-attachments/assets/56cb8e8b-2f80-468f-9825-47085e178920" />
+
+#### OST Card Hall
+<img width="1898" height="937" alt="image" src="https://github.com/user-attachments/assets/0ba21a6b-010c-4293-bce0-984b45fb4a4c" />
+
+
+### Share Link Examples
+#### Challenge Score 
+<img width="622" height="199" alt="image" src="https://github.com/user-attachments/assets/5edbc49e-ccd9-4f01-96f4-cf1805cc0994" />
+
+#### Gallery Card
+<img width="646" height="415" alt="image" src="https://github.com/user-attachments/assets/f154f939-0aa2-41f9-98f8-be08a74b7575" />
+
+#### OST Card
+<img width="646" height="469" alt="image" src="https://github.com/user-attachments/assets/3e05a3a2-694e-441b-bee1-6068639d759f" />
+
 
 
 ## Current Features
