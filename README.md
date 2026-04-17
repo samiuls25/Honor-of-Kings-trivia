@@ -1,16 +1,26 @@
 # Honor of Kings Skin Trivia
 
-A fun little trivia web app for guessing heroes and skins from splash art. Test your knowledge or just enjoy the artwork. Play the game here: https://hoktrivia.netlify.app/
+A fun little trivia web app for guessing heroes and skins from splash art, or guessing OST track titles from audio! Test your knowledge or just enjoy the artwork. Share your score with friends or share specific gallery artwork you like. Play the game here: https://hoktrivia.netlify.app/
 
 ## Visuals: Game/Gallery Mode
 ### Trivia Mode Home Page
-<img width="1919" height="945" alt="image" src="https://github.com/user-attachments/assets/3487045f-3262-4fee-952b-46c3264a19ec" />
+<img width="1903" height="943" alt="image" src="https://github.com/user-attachments/assets/fb5e50ad-450b-47dc-ba69-2a0cf3f4f59a" />
 
 ### Trivia Mode Game Page
-<img width="1903" height="935" alt="image" src="https://github.com/user-attachments/assets/8a973b17-1804-4044-80a5-d55b0b05a06e" />
+<img width="1900" height="936" alt="image" src="https://github.com/user-attachments/assets/d112cb2a-6d27-4f64-be04-2f82f954db93" />
 
 ### Gallery Mode
-<img width="1903" height="937" alt="image" src="https://github.com/user-attachments/assets/2dfa3db3-1fed-4472-be70-0d57afcffe86" />
+<img width="1901" height="938" alt="image" src="https://github.com/user-attachments/assets/cd785275-c8da-4d48-bc29-6364a8f8946f" />
+
+### Audio Trivia Mode
+#### Sound Waves
+<img width="1900" height="936" alt="image" src="https://github.com/user-attachments/assets/e0d29341-c3a6-4b06-b149-236df7446223" />
+
+#### Track Artwork
+<img width="1901" height="938" alt="image" src="https://github.com/user-attachments/assets/b3ecdd31-5b82-40c5-bc88-03035cebadd8" />
+
+### Share Links Example
+<img width="1197" height="551" alt="image" src="https://github.com/user-attachments/assets/ae250de5-4b3a-434f-9d35-8e95de8d07ff" />
 
 
 ## Current Features
@@ -184,3 +194,5 @@ The dataset shape used by the app is:
 - skinAliases[]
 - imageUrl
 - source
+
+Special thanks to qing762 for his api that provided a fuller dataset than what I originally had. API Source: https://github.com/qing762/honor-of-kings-api
