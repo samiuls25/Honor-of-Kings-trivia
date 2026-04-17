@@ -28,6 +28,7 @@ A fun little trivia web app for guessing heroes and skins from splash art. Test 
   - Sudden Death (first wrong ends the run)
 - Gallery mode:
   - Separate non-game skin gallery for browsing artwork
+  - Source selector (Official, qing translated, or Hybrid)
 - OST mode:
   - Embedded audio/video player for track-based questions
   - Optional artwork reveal toggle while answering
@@ -103,11 +104,15 @@ Output files:
 - data/processed/ost-meta.json
 - src/data/ost.generated.ts
 
-At runtime, src/data/skins.ts automatically uses generated data when available and falls back to the starter seed dataset otherwise.
+At runtime, the app now keeps skin sources separated and lets you choose the active source in setup/gallery:
+- Official Capture (recommended quality)
+- qing API (translated to English)
+- Hybrid backfill
 
 The app keeps source separation intact:
-- Existing website capture extractor remains primary.
-- qing API dataset is optional backfill.
+- Existing website capture extractor remains primary and highest quality.
+- qing API is translated and can be selected independently (or in hybrid mode).
+- qing thumbnail crop parameters are stripped during ingest to improve image quality.
 - OST dataset is independent and never overwrites skin capture files.
 
 ## OST source file format

@@ -1,4 +1,5 @@
 export type GuessTarget = 'hero-name' | 'skin-name' | 'ost-title'
+export type SkinDataSource = 'official' | 'qing-en' | 'hybrid'
 
 export type AnswerMode = 'typed' | 'multiple-choice'
 
@@ -9,6 +10,7 @@ export type ScoringStyle =
 
 export interface GameConfig {
   target: GuessTarget
+  skinSource: SkinDataSource
   answerMode: AnswerMode
   scoringStyle: ScoringStyle
 }

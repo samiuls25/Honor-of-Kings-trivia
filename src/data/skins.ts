@@ -318,9 +318,16 @@ function mergeQingBackfill(primary: SkinRecord[], fallback: SkinRecord[]) {
 const usingGeneratedData = GENERATED_SKINS.length > 0
 
 const primarySkins = usingGeneratedData ? GENERATED_SKINS : fallbackSkins
+const qingSkins = GENERATED_QING_SKINS
 const qingBackfill = mergeQingBackfill(primarySkins, GENERATED_QING_SKINS)
+const hybridSkins = qingBackfill.merged
 
-export const SKINS: SkinRecord[] = qingBackfill.merged
+export const SKINS_OFFICIAL: SkinRecord[] = primarySkins
+export const SKINS_QING: SkinRecord[] = qingSkins
+export const SKINS_HYBRID: SkinRecord[] = hybridSkins
+
+// Keep a default export path for callers that expect a single array.
+export const SKINS: SkinRecord[] = SKINS_OFFICIAL
 
 const primaryMeta = usingGeneratedData
   ? GENERATED_DATASET_META
@@ -335,7 +342,7 @@ const primaryMeta = usingGeneratedData
 export const DATASET_META = {
   ...primaryMeta,
   itemsPrimary: primarySkins.length,
-  items: SKINS.length,
+  items: SKINS_OFFICIAL.length,
   qing: {
     source: GENERATED_QING_DATASET_META.source,
     items: GENERATED_QING_DATASET_META.items,
@@ -343,3 +350,19 @@ export const DATASET_META = {
     skippedNonEnglish: qingBackfill.skippedNonEnglish,
   },
 }
+
+export const SKIN_SOURCE_META = {
+  official: {
+    source: primaryMeta.source,
+    items: SKINS_OFFICIAL.length,
+  },
+  'qing-en': {
+    source: GENERATED_QING_DATASET_META.source,
+    items: SKINS_QING.length,
+  },
+  hybrid: {
+    source: `${primaryMeta.source}+${GENERATED_QING_DATASET_META.source}`,
+    items: SKINS_HYBRID.length,
+    backfillAdded: qingBackfill.added,
+  },
+} as const

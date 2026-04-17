@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { OST_DATASET_META, OST_TRACKS } from './data/ost'
-import { DATASET_META, SKINS } from './data/skins'
+import {
+  SKINS_HYBRID,
+  SKINS_OFFICIAL,
+  SKINS_QING,
+  SKIN_SOURCE_META,
+} from './data/skins'
 import {
   calculateAccuracy,
   createQuestion,
@@ -20,6 +25,8 @@ import type {
   GuessTarget,
   Question,
   ScoringStyle,
+  SkinDataSource,
+  SkinRecord,
   TriviaRecord,
 } from './types'
 
@@ -73,6 +80,24 @@ function buildTargetOptions(hasOstTracks: boolean): Option<GuessTarget>[] {
   ]
 }
 
+const skinSourceOptions: Option<SkinDataSource>[] = [
+  {
+    value: 'official',
+    label: 'Official Capture (Recommended)',
+    description: 'Best image quality and naming consistency from world.honorofkings capture.',
+  },
+  {
+    value: 'qing-en',
+    label: 'Qing API (Translated)',
+    description: 'Expanded list translated to English from qing API source.',
+  },
+  {
+    value: 'hybrid',
+    label: 'Hybrid Backfill',
+    description: 'Official dataset plus extra entries from translated qing backfill.',
+  },
+]
+
 const answerModeOptions: Option<AnswerMode>[] = [
   {
     value: 'typed',
@@ -106,6 +131,7 @@ const scoringOptions: Option<ScoringStyle>[] = [
 
 const defaultConfig: GameConfig = {
   target: 'hero-name',
+  skinSource: 'official',
   answerMode: 'typed',
   scoringStyle: 'five-minute-easy',
 }
@@ -117,12 +143,24 @@ function getModeLabel<TValue extends string>(
   return options.find((option) => option.value === value)?.label ?? value
 }
 
-function poolForTarget(target: GuessTarget): TriviaRecord[] {
-  return target === 'ost-title' ? OST_TRACKS : SKINS
+function skinPoolForSource(source: SkinDataSource): SkinRecord[] {
+  if (source === 'qing-en') {
+    return SKINS_QING
+  }
+
+  if (source === 'hybrid') {
+    return SKINS_HYBRID
+  }
+
+  return SKINS_OFFICIAL
+}
+
+function poolForTarget(target: GuessTarget, skinSource: SkinDataSource): TriviaRecord[] {
+  return target === 'ost-title' ? OST_TRACKS : skinPoolForSource(skinSource)
 }
 
 function buildInitialGame(config: GameConfig): ActiveGame {
-  const pool = poolForTarget(config.target)
+  const pool = poolForTarget(config.target, config.skinSource)
   if (pool.length === 0) {
     throw new Error('No records available for this mode yet.')
   }
@@ -161,7 +199,14 @@ function App() {
 
   const hasOstTracks = OST_TRACKS.length > 0
   const targetOptions = useMemo(() => buildTargetOptions(hasOstTracks), [hasOstTracks])
-  const skinDatasetIssues = useMemo(() => validateSkinDataset(SKINS), [])
+  const selectedSkinPool = useMemo(
+    () => skinPoolForSource(config.skinSource),
+    [config.skinSource],
+  )
+  const skinDatasetIssues = useMemo(
+    () => validateSkinDataset(selectedSkinPool),
+    [selectedSkinPool],
+  )
   const ostDatasetIssues = useMemo(() => validateOstDataset(OST_TRACKS), [])
   const datasetIssues = useMemo(
     () => [...skinDatasetIssues, ...ostDatasetIssues.map((issue) => `OST: ${issue}`)],
@@ -169,12 +214,12 @@ function App() {
   )
   const gallerySkins = useMemo(
     () =>
-      [...SKINS].sort(
+      [...selectedSkinPool].sort(
         (left, right) =>
           left.heroName.localeCompare(right.heroName) ||
           left.skinName.localeCompare(right.skinName),
       ),
-    [],
+    [selectedSkinPool],
   )
   const gameStatus = game?.status ?? 'ended'
   const gameDeadlineMs = game?.deadlineMs ?? null
@@ -467,6 +512,32 @@ function App() {
           </div>
 
           <div className="setting-group">
+            <h3>Skin Dataset Source</h3>
+            <div className="option-grid">
+              {skinSourceOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={
+                    config.skinSource === option.value
+                      ? 'option-card active'
+                      : 'option-card'
+                  }
+                  onClick={() =>
+                    setConfig((previous) => ({
+                      ...previous,
+                      skinSource: option.value,
+                    }))
+                  }
+                >
+                  <span className="title">{option.label}</span>
+                  <span className="description">{option.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="setting-group">
             <h3>Answer Mode</h3>
             <div className="option-grid two-col">
               {answerModeOptions.map((option) => (
@@ -520,7 +591,8 @@ function App() {
 
           <div className="setup-footer">
             <p>
-              Skin dataset: {DATASET_META.items} entries from {DATASET_META.source}.
+              Selected skin source: {getModeLabel(skinSourceOptions, config.skinSource)}
+              {' '}({SKIN_SOURCE_META[config.skinSource].items} entries).
             </p>
             <p>
               OST dataset: {OST_DATASET_META.items} tracks from {OST_DATASET_META.source}.
@@ -550,6 +622,9 @@ function App() {
 
           <div className="mode-row">
             <span>{getModeLabel(targetOptions, game.config.target)}</span>
+            {game.config.target !== 'ost-title' && (
+              <span>{getModeLabel(skinSourceOptions, game.config.skinSource)}</span>
+            )}
             <span>{getModeLabel(answerModeOptions, game.config.answerMode)}</span>
             <span>{getModeLabel(scoringOptions, game.config.scoringStyle)}</span>
           </div>
@@ -706,9 +781,34 @@ function App() {
           <div className="gallery-head">
             <h2>Skin Gallery</h2>
             <p className="result-subtitle">
-              Browse every available skin artwork without starting a game.
+              Browse skin artwork from the selected source.
             </p>
             <div className="chip">Items: {gallerySkins.length}</div>
+          </div>
+
+          <div className="option-grid">
+            {skinSourceOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={
+                  config.skinSource === option.value
+                    ? 'option-card active'
+                    : 'option-card'
+                }
+                onClick={() =>
+                  setConfig((previous) => ({
+                    ...previous,
+                    skinSource: option.value,
+                  }))
+                }
+              >
+                <span className="title">{option.label}</span>
+                <span className="description">
+                  {option.description} ({SKIN_SOURCE_META[option.value].items} entries)
+                </span>
+              </button>
+            ))}
           </div>
 
           <div className="gallery-grid">

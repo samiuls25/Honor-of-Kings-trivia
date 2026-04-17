@@ -30,26 +30,41 @@ function absolutizeImage(imageValue) {
 
   // Some rows come back as malformed protocol chains like "https:https://..."
   if (value.startsWith('https:https://')) {
-    return value.replace(/^https:/, '')
+    return toFullSizeImage(value.replace(/^https:/, ''))
   }
 
   if (value.startsWith('http:http://')) {
-    return value.replace(/^http:/, '')
+    return toFullSizeImage(value.replace(/^http:/, ''))
   }
 
   // Some rows include protocol-relative wrappers around full URLs.
   if (value.startsWith('//https://') || value.startsWith('//http://')) {
-    return value.slice(2)
+    return toFullSizeImage(value.slice(2))
   }
 
   if (value.startsWith('http://') || value.startsWith('https://')) {
-    return value
+    return toFullSizeImage(value)
   }
 
   if (value.startsWith('//')) {
-    return `https:${value}`
+    return toFullSizeImage(`https:${value}`)
   }
 
+  return toFullSizeImage(value)
+}
+
+function toFullSizeImage(urlValue) {
+  const value = toCleanString(urlValue)
+  if (!value || !value.includes('?')) {
+    return value
+  }
+
+  // qing source often appends thumbnail crop transforms to otherwise high-res images.
+  if (value.includes('imageMogr2/crop/120x120')) {
+    return value.split('?')[0]
+  }
+
+  // Keep unknown query parameters intact.
   return value
 }
 
