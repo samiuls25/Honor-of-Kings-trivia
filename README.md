@@ -2,7 +2,13 @@
 
 A fun little trivia web app for guessing heroes and skins from splash art. Test your knowledge or just enjoy the artwork. Play the game here: https://hoktrivia.netlify.app/
 
-## Visuals: Game/Gallery Mode
+## Release Highlights
+
+- V1.3.0 introduces the all-new OST Hall for browsing soundtrack art, previewing tracks, seeking through audio, and sharing favorite tracks.
+- Full site experience now spans three primary sections: Play Trivia, Skin Gallery, and OST Hall.
+- Sharing now supports challenge links, gallery cards, and OST track links with social-preview metadata.
+
+## Visuals: Game/Gallery/OST Hall
 ### Trivia Mode Home Page
 <img width="1919" height="945" alt="image" src="https://github.com/user-attachments/assets/3487045f-3262-4fee-952b-46c3264a19ec" />
 
@@ -29,9 +35,15 @@ A fun little trivia web app for guessing heroes and skins from splash art. Test 
 - Gallery mode:
   - Separate non-game skin gallery for browsing artwork
   - Source selector (Official, qing translated, or Hybrid)
+- OST Hall:
+  - Dedicated soundtrack browsing view with artwork cards
+  - Single lightweight player with Play/Pause and +/-5s controls
+  - Audio scrubber for direct seek
+  - Track share links with social preview support
 - Sharing:
   - Results page includes Share Challenge with setup + score encoded in URL
   - Gallery lightbox includes Share Card for direct deep links
+  - OST Hall includes Share Track for direct OST deep links
   - Dynamic social preview metadata is generated at /share via Netlify Function
   - Shared challenge links preload mode settings so friends can instantly retry
 - OST mode:

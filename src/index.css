@@ -489,6 +489,17 @@ h3 {
   font-weight: 700;
 }
 
+.audio-scrubber {
+  width: 100%;
+  accent-color: #76d3a8;
+  cursor: pointer;
+}
+
+.audio-scrubber:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .typed-answer {
   display: flex;
   gap: 0.5rem;
@@ -565,6 +576,88 @@ h3 {
 .gallery-panel {
   display: grid;
   gap: 1rem;
+}
+
+.ost-hall-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.ost-hall-player {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.ost-hall-player h3 {
+  margin: 0.15rem 0 0;
+}
+
+.ost-track-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.ost-track-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(18, 34, 59, 0.72);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.ost-track-card.active {
+  border-color: rgba(245, 217, 164, 0.98);
+  background:
+    linear-gradient(165deg, rgba(60, 84, 123, 0.88), rgba(31, 49, 78, 0.9)),
+    rgba(18, 34, 59, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(245, 217, 164, 0.58),
+    0 16px 28px rgba(10, 20, 35, 0.42);
+}
+
+.ost-track-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 217, 164, 0.52);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+.ost-track-button {
+  border: 0;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ost-track-button img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+}
+
+.ost-track-badge {
+  display: inline-block;
+  margin-bottom: 0.35rem;
+  border-radius: 999px;
+  padding: 0.16rem 0.5rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #0d2b31;
+  border: 1px solid rgba(245, 217, 164, 0.82);
+  background: linear-gradient(130deg, var(--gold), var(--gold-strong));
+}
+
+.ost-track-card.active .gallery-skin {
+  color: #ffefc9;
 }
 
 .gallery-head {
@@ -736,7 +829,7 @@ h3 {
   }
 
   .switch-button {
-    width: 50%;
+    width: 33.3333%;
     text-align: center;
   }
 
