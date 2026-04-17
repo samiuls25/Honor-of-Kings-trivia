@@ -90,11 +90,39 @@ function buildGalleryMetadata(url) {
   }
 }
 
+function buildOstMetadata(url) {
+  const trackTitle = cleanText(url.searchParams.get('trackTitle'), 100)
+  const artistName = cleanText(url.searchParams.get('artistName'), 80)
+
+  if (trackTitle && artistName) {
+    return {
+      title: `${trackTitle} | ${APP_NAME}`,
+      description: `Listen to ${trackTitle} by ${artistName} in the Honor of Kings OST Hall.`,
+    }
+  }
+
+  if (trackTitle) {
+    return {
+      title: `${trackTitle} | ${APP_NAME}`,
+      description: 'Open this link to jump directly to the OST Hall track.',
+    }
+  }
+
+  return {
+    title: `OST Hall Track | ${APP_NAME}`,
+    description: 'Open this link to jump directly to the selected OST Hall track.',
+  }
+}
+
 function getMetadata(url) {
   const view = url.searchParams.get('view')
 
   if (view === 'gallery') {
     return buildGalleryMetadata(url)
+  }
+
+  if (view === 'ost-hall') {
+    return buildOstMetadata(url)
   }
 
   if (url.searchParams.get('challenge') === '1') {

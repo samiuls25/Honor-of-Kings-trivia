@@ -23,6 +23,7 @@ import type {
   AnswerMode,
   GameConfig,
   GuessTarget,
+  OstRecord,
   Question,
   ScoringStyle,
   SkinDataSource,
@@ -229,6 +230,15 @@ function formatTrackTitle(title: string): string {
   return title.replace(OST_TRACK_SUFFIX, '').trim()
 }
 
+function getValidOstTrackId(trackId: string | null): string {
+  if (!trackId) {
+    return OST_TRACKS[0]?.id ?? ''
+  }
+
+  const exists = OST_TRACKS.some((track) => track.id === trackId)
+  return exists ? trackId : OST_TRACKS[0]?.id ?? ''
+}
+
 function isGuessTarget(value: string | null): value is GuessTarget {
   return value === 'hero-name' || value === 'skin-name' || value === 'ost-title'
 }
@@ -393,6 +403,7 @@ type InitialRouteState = {
   config: GameConfig
   incomingChallenge: SharedChallenge | null
   selectedGallerySkin: SkinRecord | null
+  hallTrackId: string
 }
 
 function resolveInitialRouteState(): InitialRouteState {
@@ -414,6 +425,7 @@ function resolveInitialRouteState(): InitialRouteState {
           },
           incomingChallenge: null,
           selectedGallerySkin: resolved.skin,
+          hallTrackId: OST_TRACKS[0]?.id ?? '',
         }
       }
     }
@@ -428,6 +440,7 @@ function resolveInitialRouteState(): InitialRouteState {
       },
       incomingChallenge: null,
       selectedGallerySkin: null,
+      hallTrackId: OST_TRACKS[0]?.id ?? '',
     }
   }
 
@@ -437,6 +450,7 @@ function resolveInitialRouteState(): InitialRouteState {
       config: defaultConfig,
       incomingChallenge: null,
       selectedGallerySkin: null,
+      hallTrackId: getValidOstTrackId(params.get('track')),
     }
   }
 
@@ -468,6 +482,7 @@ function resolveInitialRouteState(): InitialRouteState {
         bestStreak: parseNonNegativeInt(params.get('best')),
       },
       selectedGallerySkin: null,
+      hallTrackId: OST_TRACKS[0]?.id ?? '',
     }
   }
 
@@ -476,6 +491,7 @@ function resolveInitialRouteState(): InitialRouteState {
     config: defaultConfig,
     incomingChallenge: null,
     selectedGallerySkin: null,
+    hallTrackId: OST_TRACKS[0]?.id ?? '',
   }
 }
 
@@ -549,6 +565,7 @@ function App() {
   const ytPlayerHostRef = useRef<HTMLDivElement | null>(null)
   const ytPlayerRef = useRef<YtPlayer | null>(null)
   const ytTickerRef = useRef<number | null>(null)
+  const hallPlayerCardRef = useRef<HTMLElement | null>(null)
   const hallPlayerHostRef = useRef<HTMLDivElement | null>(null)
   const hallPlayerRef = useRef<YtPlayer | null>(null)
   const hallTickerRef = useRef<number | null>(null)
@@ -560,7 +577,7 @@ function App() {
   const [ostDuration, setOstDuration] = useState(0)
   const [ostPlayerError, setOstPlayerError] = useState<string | null>(null)
   const [selectedHallTrackId, setSelectedHallTrackId] = useState<string>(
-    () => OST_TRACKS[0]?.id ?? '',
+    initialRouteState.hallTrackId,
   )
   const [hallPlayerReady, setHallPlayerReady] = useState(false)
   const [hallPlaying, setHallPlaying] = useState(false)
@@ -1134,6 +1151,16 @@ function App() {
     return buildAbsoluteUrl('/share', params)
   }
 
+  const buildOstShareUrl = (track: OstRecord): string => {
+    const params = new URLSearchParams()
+    params.set('view', 'ost-hall')
+    params.set('track', track.id)
+    params.set('trackTitle', formatTrackTitle(track.trackTitle))
+    params.set('artistName', track.artistName)
+    params.set('image', track.imageUrl)
+    return buildAbsoluteUrl('/share', params)
+  }
+
   const shareResults = async () => {
     if (!game || game.status !== 'ended') {
       return
@@ -1200,6 +1227,65 @@ function App() {
     }
 
     clearShareFeedbackSoon()
+  }
+
+  const shareOstTrack = async () => {
+    if (!selectedHallTrack) {
+      return
+    }
+
+    const shareUrl = buildOstShareUrl(selectedHallTrack)
+
+    const shareText =
+      `Check out ${formatTrackTitle(selectedHallTrack.trackTitle)} by ` +
+      `${selectedHallTrack.artistName} in the Honor of Kings OST Hall.`
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${formatTrackTitle(selectedHallTrack.trackTitle)} • Honor of Kings OST Hall`,
+          text: shareText,
+          url: shareUrl,
+        })
+        setShareFeedback('OST track share opened.')
+      } else {
+        const copied = await copyTextToClipboard(`${shareText} ${shareUrl}`)
+        setShareFeedback(copied ? 'OST track link copied.' : 'Could not copy OST track link.')
+      }
+    } catch {
+      const copied = await copyTextToClipboard(`${shareText} ${shareUrl}`)
+      setShareFeedback(copied ? 'OST track link copied.' : 'Could not share OST track.')
+    }
+
+    clearShareFeedbackSoon()
+  }
+
+  const selectHallTrack = (trackId: string, scrollToPlayer: boolean) => {
+    setSelectedHallTrackId(trackId)
+
+    replaceUrlParams((params) => {
+      params.set('view', 'ost-hall')
+      params.set('track', trackId)
+      params.delete('source')
+      params.delete('skin')
+      params.delete('challenge')
+      params.delete('target')
+      params.delete('answer')
+      params.delete('scoring')
+      params.delete('score')
+      params.delete('correct')
+      params.delete('wrong')
+      params.delete('best')
+    })
+
+    if (scrollToPlayer) {
+      window.requestAnimationFrame(() => {
+        hallPlayerCardRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      })
+    }
   }
 
   const startGame = () => {
@@ -1275,6 +1361,7 @@ function App() {
       params.set('view', 'gallery')
       params.set('source', config.skinSource)
       params.delete('skin')
+      params.delete('track')
       params.delete('challenge')
       params.delete('target')
       params.delete('answer')
@@ -1295,12 +1382,18 @@ function App() {
     setTypedGuess('')
     setSelectedGallerySkin(null)
 
-    if (!selectedHallTrackId && OST_TRACKS[0]?.id) {
-      setSelectedHallTrackId(OST_TRACKS[0].id)
+    const hallTrackId = getValidOstTrackId(selectedHallTrackId)
+    if (hallTrackId && hallTrackId !== selectedHallTrackId) {
+      setSelectedHallTrackId(hallTrackId)
     }
 
     replaceUrlParams((params) => {
       params.set('view', 'ost-hall')
+      if (hallTrackId) {
+        params.set('track', hallTrackId)
+      } else {
+        params.delete('track')
+      }
       params.delete('source')
       params.delete('skin')
       params.delete('challenge')
@@ -1324,6 +1417,7 @@ function App() {
       params.set('view', 'play')
       params.delete('source')
       params.delete('skin')
+      params.delete('track')
     })
   }
 
@@ -1471,6 +1565,17 @@ function App() {
     setOstCurrentTime(next)
   }
 
+  const seekOstTo = (seconds: number) => {
+    if (!ytPlayerRef.current || !ostPlayerReady) {
+      return
+    }
+
+    const duration = Number(ytPlayerRef.current.getDuration?.() || 0)
+    const next = Math.max(0, Math.min(duration || seconds, seconds))
+    ytPlayerRef.current.seekTo(next, true)
+    setOstCurrentTime(next)
+  }
+
   const seekHallBy = (deltaSeconds: number) => {
     if (!hallPlayerRef.current || !hallPlayerReady) {
       return
@@ -1480,6 +1585,17 @@ function App() {
     const duration = Number(hallPlayerRef.current.getDuration?.() || 0)
     const next = Math.max(0, Math.min(duration || current + deltaSeconds, current + deltaSeconds))
 
+    hallPlayerRef.current.seekTo(next, true)
+    setHallCurrentTime(next)
+  }
+
+  const seekHallTo = (seconds: number) => {
+    if (!hallPlayerRef.current || !hallPlayerReady) {
+      return
+    }
+
+    const duration = Number(hallPlayerRef.current.getDuration?.() || 0)
+    const next = Math.max(0, Math.min(duration || seconds, seconds))
     hallPlayerRef.current.seekTo(next, true)
     setHallCurrentTime(next)
   }
@@ -1778,6 +1894,18 @@ function App() {
                   </button>
                 </div>
 
+                <input
+                  type="range"
+                  className="audio-scrubber"
+                  min={0}
+                  max={Math.max(1, Math.floor(ostDuration || 0))}
+                  step={1}
+                  value={Math.min(ostCurrentTime, Math.max(1, Math.floor(ostDuration || 0)))}
+                  disabled={!ostPlayerReady}
+                  onChange={(event) => seekOstTo(Number(event.target.value))}
+                  aria-label="Seek track position"
+                />
+
                 <p className="audio-time">
                   {formatAudioTime(ostCurrentTime)} / {formatAudioTime(ostDuration)}
                 </p>
@@ -1930,7 +2058,7 @@ function App() {
           )}
 
           {selectedHallTrack && OST_TRACKS.length > 0 && (
-            <article className="question-card ost-hall-player">
+            <article className="question-card ost-hall-player" ref={hallPlayerCardRef}>
               <div className="yt-audio-host" ref={hallPlayerHostRef} aria-hidden="true" />
               <img
                 src={selectedHallTrack.imageUrl}
@@ -1968,7 +2096,26 @@ function App() {
                 >
                   +5s
                 </button>
+                <button
+                  type="button"
+                  className="share-button"
+                  onClick={shareOstTrack}
+                >
+                  Share Track
+                </button>
               </div>
+
+              <input
+                type="range"
+                className="audio-scrubber"
+                min={0}
+                max={Math.max(1, Math.floor(hallDuration || 0))}
+                step={1}
+                value={Math.min(hallCurrentTime, Math.max(1, Math.floor(hallDuration || 0)))}
+                disabled={!hallPlayerReady}
+                onChange={(event) => seekHallTo(Number(event.target.value))}
+                aria-label="Seek OST hall track position"
+              />
 
               <p className="audio-time">
                 {formatAudioTime(hallCurrentTime)} / {formatAudioTime(hallDuration)}
@@ -1994,7 +2141,7 @@ function App() {
                   <button
                     type="button"
                     className="ost-track-button"
-                    onClick={() => setSelectedHallTrackId(track.id)}
+                    onClick={() => selectHallTrack(track.id, true)}
                   >
                     <img
                       src={track.imageUrl}
@@ -2004,6 +2151,9 @@ function App() {
                       fetchPriority={index < 8 ? 'high' : 'auto'}
                     />
                     <div className="gallery-meta">
+                      {selectedHallTrack?.id === track.id && (
+                        <span className="ost-track-badge">Now Playing</span>
+                      )}
                       <p className="gallery-skin">{formatTrackTitle(track.trackTitle)}</p>
                       <p className="gallery-hero">{track.artistName}</p>
                     </div>
