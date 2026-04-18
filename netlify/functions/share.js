@@ -1,4 +1,5 @@
 import { recordMetricEvent } from './metrics-store.js'
+import { signChallengeFromParams } from './challenge-signature.js'
 
 const APP_NAME = 'Honor of Kings Trivia'
 const DEFAULT_DESCRIPTION =
@@ -173,6 +174,11 @@ function getSafeImage(url) {
 
 function buildAppTarget(url) {
   const params = new URLSearchParams(url.searchParams)
+
+  if (params.get('challenge') === '1') {
+    params.set('sig', signChallengeFromParams(params))
+  }
+
   const query = params.toString()
   return query ? `${url.origin}/?${query}` : `${url.origin}/`
 }

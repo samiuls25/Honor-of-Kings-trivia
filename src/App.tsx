@@ -175,6 +175,8 @@ type SharedChallenge = {
   correct: number
   wrong: number
   bestStreak: number
+  signature: string
+  verification: 'pending' | 'valid' | 'invalid'
 }
 
 type WaveProfile = {
@@ -275,6 +277,38 @@ function parseNonNegativeInt(value: string | null): number {
   }
 
   return parsed
+}
+
+async function verifyChallengeSignature(challenge: SharedChallenge): Promise<boolean> {
+  try {
+    const response = await fetch('/challenge/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        challenge: 1,
+        target: challenge.config.target,
+        source: challenge.config.skinSource,
+        answer: challenge.config.answerMode,
+        scoring: challenge.config.scoringStyle,
+        score: challenge.score,
+        correct: challenge.correct,
+        wrong: challenge.wrong,
+        best: challenge.bestStreak,
+        sig: challenge.signature,
+      }),
+    })
+
+    if (!response.ok) {
+      return false
+    }
+
+    const payload = (await response.json()) as { valid?: boolean }
+    return payload.valid === true
+  } catch {
+    return false
+  }
 }
 
 function buildAbsoluteUrl(pathname: string, params: URLSearchParams): string {
@@ -485,6 +519,8 @@ function resolveInitialRouteState(): InitialRouteState {
         correct: parseNonNegativeInt(params.get('correct')),
         wrong: parseNonNegativeInt(params.get('wrong')),
         bestStreak: parseNonNegativeInt(params.get('best')),
+        signature: params.get('sig') || '',
+        verification: 'pending',
       },
       selectedGallerySkin: null,
       hallTrackId: OST_TRACKS[0]?.id ?? '',
@@ -600,7 +636,7 @@ function App() {
 
     return window.localStorage.getItem('hok-live-stats-hidden') !== '1'
   })
-  const [incomingChallenge] = useState<SharedChallenge | null>(
+  const [incomingChallenge, setIncomingChallenge] = useState<SharedChallenge | null>(
     initialRouteState.incomingChallenge,
   )
 
@@ -708,6 +744,35 @@ function App() {
 
     window.localStorage.setItem('hok-live-stats-hidden', '1')
   }, [showLiveStats])
+
+  useEffect(() => {
+    if (!incomingChallenge || incomingChallenge.verification !== 'pending') {
+      return
+    }
+
+    let cancelled = false
+
+    void verifyChallengeSignature(incomingChallenge).then((valid) => {
+      if (cancelled) {
+        return
+      }
+
+      setIncomingChallenge((previous) => {
+        if (!previous) {
+          return previous
+        }
+
+        return {
+          ...previous,
+          verification: valid ? 'valid' : 'invalid',
+        }
+      })
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [incomingChallenge])
 
   useEffect(() => {
     return () => {
@@ -1806,12 +1871,32 @@ function App() {
 
           {incomingChallenge && (
             <div className="share-highlight" role="status">
-              <p className="share-highlight-kicker">Shared Challenge</p>
-              <p className="share-highlight-title">Can you beat this run?</p>
-              <p className="share-highlight-meta">
-                Score {incomingChallenge.score}, {incomingChallenge.correct} correct,{' '}
-                {incomingChallenge.wrong} wrong, best streak {incomingChallenge.bestStreak}
-              </p>
+              {incomingChallenge.verification === 'invalid' ? (
+                <>
+                  <p className="share-highlight-kicker">Shared Challenge</p>
+                  <p className="share-highlight-title">Skill issue :)</p>
+                  <p className="share-highlight-meta">
+                    Edited score parameters detected. Nice try, run the challenge for real.
+                  </p>
+                </>
+              ) : incomingChallenge.verification === 'pending' ? (
+                <>
+                  <p className="share-highlight-kicker">Shared Challenge</p>
+                  <p className="share-highlight-title">Verifying challenge link...</p>
+                  <p className="share-highlight-meta">
+                    Validating score integrity before showing challenge stats.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="share-highlight-kicker">Shared Challenge</p>
+                  <p className="share-highlight-title">Can you beat this run?</p>
+                  <p className="share-highlight-meta">
+                    Score {incomingChallenge.score}, {incomingChallenge.correct} correct,{' '}
+                    {incomingChallenge.wrong} wrong, best streak {incomingChallenge.bestStreak}
+                  </p>
+                </>
+              )}
             </div>
           )}
 
@@ -2132,7 +2217,41 @@ function App() {
       )}
 
       {viewMode === 'play' && game?.status === 'ended' && (
-        <section className="panel">
+        <section
+          className={[
+            'panel',
+            'results-panel',
+            game.endReason === 'completed-dataset'
+              ? game.wrong === 0
+                ? 'results-panel-perfect'
+                : 'results-panel-complete'
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          {game.endReason === 'completed-dataset' && (
+            <div
+              className={
+                game.wrong === 0
+                  ? 'celebration-layer celebration-perfect'
+                  : 'celebration-layer celebration-complete'
+              }
+              aria-hidden="true"
+            >
+              {Array.from({ length: game.wrong === 0 ? 18 : 14 }, (_, index) => (
+                <span
+                  key={`celebration-${index}`}
+                  className="celebration-piece"
+                  style={{
+                    left: `${((index * 17) % 95) + 2}%`,
+                    animationDelay: `${(index % 6) * 0.14}s`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
           <h2>Results</h2>
           <p className="result-subtitle">{endReasonLabel}</p>
 

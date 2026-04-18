@@ -25,3 +25,9 @@
   to = "/.netlify/functions/metrics-badge"
   status = 200
   force = true
+
+[[redirects]]
+  from = "/challenge/verify"
+  to = "/.netlify/functions/challenge-verify"
+  status = 200
+  force = true
