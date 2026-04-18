@@ -26,6 +26,62 @@ export function normalizeGuess(input: string): string {
     .replace(/\s+/g, ' ')
 }
 
+function levenshteinDistanceWithinLimit(left: string, right: string, limit: number): number {
+  if (left === right) {
+    return 0
+  }
+
+  const leftLength = left.length
+  const rightLength = right.length
+
+  if (Math.abs(leftLength - rightLength) > limit) {
+    return limit + 1
+  }
+
+  const previous = new Array<number>(rightLength + 1)
+  const current = new Array<number>(rightLength + 1)
+
+  for (let index = 0; index <= rightLength; index += 1) {
+    previous[index] = index
+  }
+
+  for (let row = 1; row <= leftLength; row += 1) {
+    current[0] = row
+    let minInRow = current[0]
+
+    for (let column = 1; column <= rightLength; column += 1) {
+      const substitutionCost = left[row - 1] === right[column - 1] ? 0 : 1
+      current[column] = Math.min(
+        previous[column] + 1,
+        current[column - 1] + 1,
+        previous[column - 1] + substitutionCost,
+      )
+
+      if (current[column] < minInRow) {
+        minInRow = current[column]
+      }
+    }
+
+    if (minInRow > limit) {
+      return limit + 1
+    }
+
+    for (let index = 0; index <= rightLength; index += 1) {
+      previous[index] = current[index]
+    }
+  }
+
+  return previous[rightLength]
+}
+
+function abbreviationFor(value: string): string {
+  return value
+    .split(' ')
+    .filter(Boolean)
+    .map((token) => token[0])
+    .join('')
+}
+
 function uniqueNormalized(values: string[]): string[] {
   const seen = new Set<string>()
   const result: string[] = []
@@ -145,9 +201,45 @@ export function createQuestion(
 
 export function isAnswerCorrect(input: string, acceptedAnswers: string[]): boolean {
   const normalizedInput = normalizeGuess(input)
-  return acceptedAnswers.some(
-    (answer) => normalizeGuess(answer) === normalizedInput,
-  )
+  if (!normalizedInput) {
+    return false
+  }
+
+  const normalizedAccepted = acceptedAnswers
+    .map((answer) => normalizeGuess(answer))
+    .filter(Boolean)
+
+  if (normalizedAccepted.some((answer) => answer === normalizedInput)) {
+    return true
+  }
+
+  if (
+    normalizedInput.length >= 4 &&
+    normalizedAccepted.some((answer) => answer.startsWith(normalizedInput))
+  ) {
+    return true
+  }
+
+  if (
+    normalizedInput.length >= 2 &&
+    normalizedAccepted.some((answer) => {
+      const abbreviation = abbreviationFor(answer)
+      return abbreviation.length >= normalizedInput.length && abbreviation.startsWith(normalizedInput)
+    })
+  ) {
+    return true
+  }
+
+  return normalizedAccepted.some((answer) => {
+    const maxLength = Math.max(answer.length, normalizedInput.length)
+    const typoLimit = maxLength >= 11 ? 2 : maxLength >= 6 ? 1 : 0
+
+    if (typoLimit === 0) {
+      return false
+    }
+
+    return levenshteinDistanceWithinLimit(normalizedInput, answer, typoLimit) <= typoLimit
+  })
 }
 
 export function getScoreDelta(style: ScoringStyle, isCorrect: boolean): number {

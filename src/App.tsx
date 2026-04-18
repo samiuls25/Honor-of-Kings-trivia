@@ -13,7 +13,6 @@ import {
   getScoreDelta,
   initialTimeLimitMs,
   isAnswerCorrect,
-  nextSkinFromQueue,
   shouldEndAfterAnswer,
   shuffle,
   validateOstDataset,
@@ -134,7 +133,7 @@ function ensureYouTubeIframeApi(): Promise<void> {
   return window.__ytIframeApiPromise
 }
 
-type EndReason = 'timeout' | 'wrong-answer' | 'manual' | null
+type EndReason = 'timeout' | 'wrong-answer' | 'manual' | 'completed-dataset' | null
 
 interface ActiveGame {
   status: 'playing' | 'ended'
@@ -1243,9 +1242,13 @@ function App() {
       .join(' | ')
 
     const shareText =
-      `I scored ${game.score} in Honor of Kings Trivia ` +
-      `(${game.correct} correct, ${game.wrong} wrong, best streak ${game.bestStreak}). ` +
-      `Mode: ${modeSummary}. Can you beat this challenge?`
+        game.endReason === 'completed-dataset'
+          ? game.wrong === 0
+            ? `I completed the full Honor of Kings Trivia dataset with a perfect clear (${game.correct} correct, 0 wrong, score ${game.score}). Mode: ${modeSummary}. Can you beat this run?`
+            : `I completed the full Honor of Kings Trivia dataset (${game.correct} correct, ${game.wrong} wrong, score ${game.score}). Mode: ${modeSummary}. Can you beat this run?`
+          : `I scored ${game.score} in Honor of Kings Trivia ` +
+            `(${game.correct} correct, ${game.wrong} wrong, best streak ${game.bestStreak}). ` +
+            `Mode: ${modeSummary}. Can you beat this challenge?`
 
     trackMetricEvent('share_generated', 'challenge')
 
@@ -1572,15 +1575,20 @@ function App() {
             return previous
           }
 
-          const { queue, queueIndex, nextSkin } = nextSkinFromQueue(
-            previous.queue,
-            previous.queueIndex,
-            previous.question.recordId,
-          )
+          const reachedPoolEnd = previous.queueIndex >= previous.queue.length - 1
+          if (reachedPoolEnd) {
+            return {
+              ...previous,
+              status: 'ended',
+              endReason: 'completed-dataset',
+            }
+          }
+
+          const queueIndex = previous.queueIndex + 1
+          const nextSkin = previous.queue[queueIndex]
 
           return {
             ...previous,
-            queue,
             queueIndex,
             question: createQuestion(nextSkin, previous.config, previous.queue),
           }
@@ -1599,6 +1607,10 @@ function App() {
         ? 'Run ended on your first wrong answer.'
         : game?.endReason === 'manual'
           ? 'Game ended by player.'
+          : game?.endReason === 'completed-dataset'
+            ? game?.wrong === 0
+              ? 'Legendary clear: you completed the full dataset with a perfect run.'
+              : 'Dataset completed: you reached the end of the full question pool.'
           : 'Session complete.'
 
   const toggleOstPlayback = () => {

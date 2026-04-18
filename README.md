@@ -76,7 +76,7 @@ For immediate values, open: https://hoktrivia.netlify.app/metrics/summary
   - Guess Skin Name
   - Guess OST Track Title
 - Answer input modes:
-  - Typed entry (case-insensitive)
+  - Typed entry (case-insensitive, spacing-tolerant, and lightly typo-tolerant)
   - 4-option multiple choice
 - Scoring styles:
   - 5 Minute Easy (+1 correct, no penalty)
@@ -99,6 +99,9 @@ For immediate values, open: https://hoktrivia.netlify.app/metrics/summary
 - OST mode:
   - Embedded audio/video player for track-based questions
   - Optional artwork reveal toggle while answering
+- Progression:
+  - Questions avoid repeats until the active dataset pool is fully completed
+  - Completing the full pool ends the run with a special completion result that can be shared
 - Responsive UI for desktop and mobile.
 
 ## Stack
