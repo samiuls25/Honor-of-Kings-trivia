@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { HERO_IDENTITY_DATASET_META, HERO_IDENTITY_RECORDS } from './data/heroIdentity'
 import { OST_DATASET_META, OST_TRACKS } from './data/ost'
 import {
   SKINS_HYBRID,
@@ -15,6 +16,7 @@ import {
   isAnswerCorrect,
   shouldEndAfterAnswer,
   shuffle,
+  validateHeroIdentityDataset,
   validateOstDataset,
   validateSkinDataset,
 } from './game/engine'
@@ -28,6 +30,7 @@ import type {
   AnswerMode,
   GameConfig,
   GuessTarget,
+  HeroIdentityRecord,
   OstRecord,
   Question,
   ScoringStyle,
@@ -160,7 +163,7 @@ interface Option<TValue extends string> {
 
 type ViewMode = 'play' | 'gallery' | 'ost-hall'
 const WAVE_BARS = 40
-const APP_VERSION_LABEL = 'V1.3.3'
+const APP_VERSION_LABEL = 'V1.4.0'
 const IMAGE_PRELOAD_HOSTS = [
   'https://world.honorofkings.com',
   'https://game.gtimg.cn',
@@ -247,7 +250,12 @@ function getValidOstTrackId(trackId: string | null): string {
 }
 
 function isGuessTarget(value: string | null): value is GuessTarget {
-  return value === 'hero-name' || value === 'skin-name' || value === 'ost-title'
+  return (
+    value === 'hero-name' ||
+    value === 'skin-name' ||
+    value === 'ost-title' ||
+    value === 'hero-identity'
+  )
 }
 
 function isSkinDataSource(value: string | null): value is SkinDataSource {
@@ -358,7 +366,10 @@ function waveZoneClass(index: number): 'wave-bar bass' | 'wave-bar mid' | 'wave-
   return 'wave-bar treble'
 }
 
-function buildTargetOptions(hasOstTracks: boolean): Option<GuessTarget>[] {
+function buildTargetOptions(
+  hasOstTracks: boolean,
+  hasHeroIdentityRecords: boolean,
+): Option<GuessTarget>[] {
   return [
     {
       value: 'hero-name',
@@ -377,6 +388,14 @@ function buildTargetOptions(hasOstTracks: boolean): Option<GuessTarget>[] {
         ? 'An embedded track is played. Identify the track title.'
         : 'Load OST data first (run ingest:ost:all) to enable this mode.',
       disabled: !hasOstTracks,
+    },
+    {
+      value: 'hero-identity',
+      label: 'Guess Hero by Identity',
+      description: hasHeroIdentityRecords
+        ? 'An identity profile is shown. Identify the hero.'
+        : 'Load hero identity data first (run ingest:hero-identity:all) to enable this mode.',
+      disabled: !hasHeroIdentityRecords,
     },
   ]
 }
@@ -556,7 +575,15 @@ function skinPoolForSource(source: SkinDataSource): SkinRecord[] {
 }
 
 function poolForTarget(target: GuessTarget, skinSource: SkinDataSource): TriviaRecord[] {
-  return target === 'ost-title' ? OST_TRACKS : skinPoolForSource(skinSource)
+  if (target === 'ost-title') {
+    return OST_TRACKS
+  }
+
+  if (target === 'hero-identity') {
+    return HERO_IDENTITY_RECORDS
+  }
+
+  return skinPoolForSource(skinSource)
 }
 
 function buildInitialGame(config: GameConfig): ActiveGame {
@@ -641,19 +668,38 @@ function App() {
   )
 
   const hasOstTracks = OST_TRACKS.length > 0
-  const targetOptions = useMemo(() => buildTargetOptions(hasOstTracks), [hasOstTracks])
+  const hasHeroIdentityRecords = HERO_IDENTITY_RECORDS.length > 0
+  const targetOptions = useMemo(
+    () => buildTargetOptions(hasOstTracks, hasHeroIdentityRecords),
+    [hasHeroIdentityRecords, hasOstTracks],
+  )
   const selectedSkinPool = useMemo(
     () => skinPoolForSource(config.skinSource),
     [config.skinSource],
   )
+  const heroIdentityByName = useMemo(() => {
+    const map = new Map<string, HeroIdentityRecord>()
+    for (const record of HERO_IDENTITY_RECORDS) {
+      map.set(record.heroName, record)
+    }
+    return map
+  }, [])
   const skinDatasetIssues = useMemo(
     () => validateSkinDataset(selectedSkinPool),
     [selectedSkinPool],
   )
   const ostDatasetIssues = useMemo(() => validateOstDataset(OST_TRACKS), [])
+  const heroIdentityDatasetIssues = useMemo(
+    () => validateHeroIdentityDataset(HERO_IDENTITY_RECORDS),
+    [],
+  )
   const datasetIssues = useMemo(
-    () => [...skinDatasetIssues, ...ostDatasetIssues.map((issue) => `OST: ${issue}`)],
-    [ostDatasetIssues, skinDatasetIssues],
+    () => [
+      ...skinDatasetIssues,
+      ...ostDatasetIssues.map((issue) => `OST: ${issue}`),
+      ...heroIdentityDatasetIssues.map((issue) => `Hero Identity: ${issue}`),
+    ],
+    [heroIdentityDatasetIssues, ostDatasetIssues, skinDatasetIssues],
   )
   const gallerySkins = useMemo(
     () =>
@@ -799,11 +845,22 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!game || game.status !== 'playing' || game.question.mediaType !== 'image') {
+    if (!game || game.status !== 'playing') {
       return
     }
 
-    primeImage(game.question.imageUrl)
+    if (game.question.mediaType === 'image' || game.question.mediaType === 'identity') {
+      primeImage(game.question.imageUrl)
+    }
+
+    if (game.question.mediaType === 'identity') {
+      for (const option of game.question.options) {
+        const identityRecord = heroIdentityByName.get(option)
+        if (identityRecord?.imageUrl) {
+          primeImage(identityRecord.imageUrl)
+        }
+      }
+    }
 
     const lookahead = 3
     for (
@@ -816,7 +873,7 @@ function App() {
         primeImage(nextRecord.imageUrl)
       }
     }
-  }, [game])
+  }, [game, heroIdentityByName])
 
   useEffect(() => {
     if (viewMode !== 'gallery') {
@@ -1297,7 +1354,7 @@ function App() {
     const shareUrl = buildChallengeShareUrl(game)
     const modeSummary = [
       getModeLabel(targetOptions, game.config.target),
-      game.config.target === 'ost-title'
+      game.config.target === 'ost-title' || game.config.target === 'hero-identity'
         ? null
         : getModeLabel(skinSourceOptions, game.config.skinSource),
       getModeLabel(answerModeOptions, game.config.answerMode),
@@ -1438,14 +1495,17 @@ function App() {
 
     const selectedTarget = targetOptions.find((option) => option.value === config.target)
     if (selectedTarget?.disabled) {
-      setSetupError('This mode is disabled until OST data is loaded.')
+      setSetupError(selectedTarget.description)
       return
     }
 
     try {
       const initialGame = buildInitialGame(config)
       setGame(initialGame)
-      trackMetricEvent('game_started', config.target === 'ost-title' ? 'ost' : 'standard')
+      trackMetricEvent(
+        'game_started',
+        config.target === 'ost-title' ? 'ost' : 'standard',
+      )
       refreshMetricsSnapshot()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to start this mode.'
@@ -1466,14 +1526,17 @@ function App() {
 
     const selectedTarget = targetOptions.find((option) => option.value === game.config.target)
     if (selectedTarget?.disabled) {
-      setSetupError('This mode is disabled until OST data is loaded.')
+      setSetupError(selectedTarget.description)
       return
     }
 
     try {
       const nextGame = buildInitialGame(game.config)
       setGame(nextGame)
-      trackMetricEvent('game_started', game.config.target === 'ost-title' ? 'ost' : 'standard')
+      trackMetricEvent(
+        'game_started',
+        game.config.target === 'ost-title' ? 'ost' : 'standard',
+      )
       refreshMetricsSnapshot()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to start this mode.'
@@ -1911,6 +1974,7 @@ function App() {
                   className={[
                     config.target === option.value ? 'option-card active' : 'option-card',
                     option.value === 'ost-title' ? 'option-card-ost' : '',
+                    option.value === 'hero-identity' ? 'option-card-identity' : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
@@ -1931,6 +1995,9 @@ function App() {
                   {option.value === 'ost-title' && (
                     <span className="ost-chip">Audio Challenge</span>
                   )}
+                  {option.value === 'hero-identity' && (
+                    <span className="ost-chip">Lore Challenge</span>
+                  )}
                   <span className="title">{option.label}</span>
                   <span className="description">{option.description}</span>
                 </button>
@@ -1940,15 +2007,19 @@ function App() {
 
           <div className="setting-group">
             <h3>Skin Dataset Source</h3>
-            {config.target === 'ost-title' && (
-              <p className="result-subtitle">Skin source is disabled for Guess OST Track mode.</p>
+            {(config.target === 'ost-title' || config.target === 'hero-identity') && (
+              <p className="result-subtitle">
+                Skin source is disabled for non-skin challenge targets.
+              </p>
             )}
             <div className="option-grid">
               {skinSourceOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
-                  disabled={config.target === 'ost-title'}
+                  disabled={
+                    config.target === 'ost-title' || config.target === 'hero-identity'
+                  }
                   className={
                     config.skinSource === option.value
                       ? 'option-card active'
@@ -1956,7 +2027,10 @@ function App() {
                   }
                   onClick={() =>
                     setConfig((previous) => {
-                      if (previous.target === 'ost-title') {
+                      if (
+                        previous.target === 'ost-title' ||
+                        previous.target === 'hero-identity'
+                      ) {
                         return previous
                       }
 
@@ -2028,12 +2102,16 @@ function App() {
 
           <div className="setup-footer">
             <p>
-              {config.target === 'ost-title'
-                ? 'Selected skin source is not used in Guess OST Track mode.'
+              {config.target === 'ost-title' || config.target === 'hero-identity'
+                ? 'Selected skin source is not used in this challenge target.'
                 : `Selected skin source: ${getModeLabel(skinSourceOptions, config.skinSource)} (${SKIN_SOURCE_META[config.skinSource].items} entries).`}
             </p>
             <p>
               OST dataset: {OST_DATASET_META.items} tracks from {OST_DATASET_META.source}.
+            </p>
+            <p>
+              Hero identity dataset: {HERO_IDENTITY_DATASET_META.items} profiles from{' '}
+              {HERO_IDENTITY_DATASET_META.source}.
             </p>
             <button className="primary-button" onClick={startGame}>
               Start Match
@@ -2061,7 +2139,7 @@ function App() {
 
           <div className="mode-row">
             <span>{getModeLabel(targetOptions, game.config.target)}</span>
-            {game.config.target !== 'ost-title' && (
+            {game.config.target !== 'ost-title' && game.config.target !== 'hero-identity' && (
               <span>{getModeLabel(skinSourceOptions, game.config.skinSource)}</span>
             )}
             <span>{getModeLabel(answerModeOptions, game.config.answerMode)}</span>
@@ -2166,6 +2244,13 @@ function App() {
               </div>
             )}
 
+            {game.question.mediaType === 'identity' && (
+              <div className="identity-stage">
+                <p className="identity-label">Identity Profile</p>
+                <p className="identity-text">{game.question.identityHint}</p>
+              </div>
+            )}
+
             <h2>{game.question.prompt}</h2>
 
             {game.config.answerMode === 'typed' && (
@@ -2184,7 +2269,9 @@ function App() {
                       ? 'Type hero name'
                       : game.config.target === 'skin-name'
                         ? 'Type skin name'
-                        : 'Type track title'
+                        : game.config.target === 'hero-identity'
+                          ? 'Type hero name'
+                          : 'Type track title'
                   }
                   autoFocus
                 />
@@ -2200,23 +2287,54 @@ function App() {
 
             {game.config.answerMode === 'multiple-choice' && (
               <div className="option-grid two-col">
-                {game.question.options.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className="option-card"
-                    disabled={Boolean(feedback)}
-                    onClick={() => submitAnswer(option)}
-                  >
-                    <span className="title">
-                      {formatOptionLabel(option, game.config.target)}
-                    </span>
-                  </button>
-                ))}
+                {game.question.options.map((option) => {
+                  const identityRecord =
+                    game.config.target === 'hero-identity'
+                      ? heroIdentityByName.get(option)
+                      : null
+
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      className={
+                        game.config.target === 'hero-identity'
+                          ? 'option-card option-card-hero-identity'
+                          : 'option-card'
+                      }
+                      disabled={Boolean(feedback)}
+                      onClick={() => submitAnswer(option)}
+                    >
+                      {identityRecord?.imageUrl && (
+                        <img
+                          className="identity-option-image"
+                          src={identityRecord.imageUrl}
+                          alt={`Hero portrait ${option}`}
+                          loading="eager"
+                          fetchPriority="high"
+                          decoding="async"
+                        />
+                      )}
+                      <span className="title">
+                        {formatOptionLabel(option, game.config.target)}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             )}
 
-            {feedback && <p className="feedback">{feedback}</p>}
+            {feedback && (
+              <p
+                className={
+                  feedback.startsWith('Wrong.')
+                    ? 'feedback feedback-error'
+                    : 'feedback'
+                }
+              >
+                {feedback}
+              </p>
+            )}
           </article>
 
           <div className="play-actions">

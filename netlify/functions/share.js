@@ -9,6 +9,7 @@ const TARGET_LABELS = {
   'hero-name': 'Guess Hero Name',
   'skin-name': 'Guess Skin Name',
   'ost-title': 'Guess OST Track',
+  'hero-identity': 'Guess Hero by Identity',
 }
 
 const SOURCE_LABELS = {
@@ -61,10 +62,14 @@ function buildChallengeMetadata(url) {
   const correct = clampInt(url.searchParams.get('correct'))
   const wrong = clampInt(url.searchParams.get('wrong'))
   const best = clampInt(url.searchParams.get('best'))
-  const target = TARGET_LABELS[url.searchParams.get('target')] || 'Custom Mode'
+  const targetKey = url.searchParams.get('target')
+  const target = TARGET_LABELS[targetKey] || 'Custom Mode'
   const answer = ANSWER_LABELS[url.searchParams.get('answer')] || 'Unknown Answer Mode'
   const scoring = SCORING_LABELS[url.searchParams.get('scoring')] || 'Unknown Scoring'
-  const source = SOURCE_LABELS[url.searchParams.get('source')] || null
+  const source =
+    targetKey === 'hero-name' || targetKey === 'skin-name'
+      ? SOURCE_LABELS[url.searchParams.get('source')] || null
+      : null
 
   const modeParts = [target, source, answer, scoring].filter(Boolean)
 
