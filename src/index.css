@@ -317,6 +317,21 @@ h3 {
     rgba(25, 43, 71, 0.62);
 }
 
+.option-card-identity {
+  position: relative;
+  border-color: rgba(245, 195, 118, 0.58);
+  background:
+    linear-gradient(145deg, rgba(88, 48, 22, 0.92), rgba(34, 26, 70, 0.85)),
+    rgba(25, 43, 71, 0.58);
+}
+
+.option-card-identity.active {
+  border-color: rgba(245, 217, 164, 0.92);
+  background:
+    linear-gradient(145deg, rgba(96, 56, 26, 0.95), rgba(42, 30, 76, 0.9)),
+    rgba(25, 43, 71, 0.62);
+}
+
 .ost-chip {
   display: inline-block;
   margin-bottom: 0.4rem;
@@ -473,6 +488,32 @@ h3 {
   gap: 0.7rem;
 }
 
+.identity-stage {
+  border: 1px solid rgba(245, 195, 118, 0.42);
+  border-radius: 10px;
+  padding: 0.85rem 0.95rem;
+  text-align: center;
+  background:
+    radial-gradient(circle at 88% 16%, rgba(245, 195, 118, 0.16), transparent 34%),
+    radial-gradient(circle at 18% 78%, rgba(124, 170, 247, 0.18), transparent 42%),
+    rgba(14, 26, 44, 0.94);
+}
+
+.identity-label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.74rem;
+  color: rgba(245, 217, 164, 0.9);
+}
+
+.identity-text {
+  margin: 0.42rem 0 0;
+  font-size: 1.05rem;
+  color: #fff1d8;
+  font-weight: 700;
+}
+
 .yt-audio-host {
   width: 0;
   height: 0;
@@ -599,11 +640,31 @@ h3 {
   outline-offset: 1px;
 }
 
+.option-card-hero-identity {
+  display: grid;
+  gap: 0.52rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.identity-option-image {
+  width: 100%;
+  height: 250px;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 217, 164, 0.24);
+  background: rgba(12, 22, 38, 0.45);
+}
+
 .feedback {
   margin-top: 0.65rem;
   color: var(--ok);
   font-weight: 700;
   min-height: 1.2rem;
+}
+
+.feedback-error {
+  color: var(--danger);
 }
 
 .play-actions,

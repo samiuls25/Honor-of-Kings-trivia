@@ -22,7 +22,11 @@
     "ingest:ost:extract": "node scripts/ingest/from-ost-source.mjs",
     "ingest:ost:validate": "node scripts/ingest/validate-ost.mjs",
     "ingest:ost:generate": "node scripts/ingest/generate-ost-ts.mjs",
-    "ingest:ost:all": "npm run ingest:ost:fetch && npm run ingest:ost:extract && npm run ingest:ost:validate && npm run ingest:ost:generate"
+    "ingest:ost:all": "npm run ingest:ost:fetch && npm run ingest:ost:extract && npm run ingest:ost:validate && npm run ingest:ost:generate",
+    "ingest:hero-identity:extract": "node scripts/ingest/from-hero-identity.mjs",
+    "ingest:hero-identity:validate": "node scripts/ingest/validate-hero-identity.mjs",
+    "ingest:hero-identity:generate": "node scripts/ingest/generate-hero-identity-ts.mjs",
+    "ingest:hero-identity:all": "npm run ingest:hero-identity:extract && npm run ingest:hero-identity:validate && npm run ingest:hero-identity:generate"
   },
   "dependencies": {
     "@netlify/blobs": "^10.0.7",

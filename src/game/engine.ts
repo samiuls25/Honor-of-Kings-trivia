@@ -1,6 +1,7 @@
 import type {
   GameConfig,
   GuessTarget,
+  HeroIdentityRecord,
   OstRecord,
   Question,
   ScoringStyle,
@@ -106,9 +107,17 @@ function isOstRecord(record: TriviaRecord): record is OstRecord {
   return 'trackTitle' in record && 'audioUrl' in record
 }
 
+function isHeroIdentityRecord(record: TriviaRecord): record is HeroIdentityRecord {
+  return 'identity' in record && 'heroId' in record && !('skinName' in record)
+}
+
 function answerForTarget(record: TriviaRecord, target: GuessTarget): string {
   if (target === 'ost-title') {
     return isOstRecord(record) ? record.trackTitle : ''
+  }
+
+  if (target === 'hero-identity') {
+    return isHeroIdentityRecord(record) ? record.heroName : ''
   }
 
   if (!isSkinRecord(record)) {
@@ -124,6 +133,13 @@ function acceptedAnswersForTarget(record: TriviaRecord, target: GuessTarget): st
       return []
     }
     return uniqueNormalized([record.trackTitle, ...record.trackAliases])
+  }
+
+  if (target === 'hero-identity') {
+    if (!isHeroIdentityRecord(record)) {
+      return []
+    }
+    return uniqueNormalized([record.heroName, ...record.heroAliases])
   }
 
   if (!isSkinRecord(record)) {
@@ -171,6 +187,9 @@ export function createQuestion(
     if (config.target === 'skin-name') {
       return 'What is the skin name shown here?'
     }
+    if (config.target === 'hero-identity') {
+      return 'Which hero matches this identity profile?'
+    }
     return 'What is the title of this Honor of Kings track?'
   })()
 
@@ -182,14 +201,20 @@ export function createQuestion(
         )
       : []
 
-  const mediaType = isOstRecord(record) ? 'audio' : 'image'
+  const mediaType = isOstRecord(record)
+    ? 'audio'
+    : isHeroIdentityRecord(record)
+      ? 'identity'
+      : 'image'
   const audioUrl = isOstRecord(record) ? record.audioUrl : null
+  const identityHint = isHeroIdentityRecord(record) ? record.identity : null
 
   return {
     id: `${record.id}-${config.target}-${config.answerMode}`,
     recordId: record.id,
     imageUrl: record.imageUrl,
     audioUrl,
+    identityHint,
     mediaType,
     prompt,
     target: config.target,
@@ -363,6 +388,36 @@ export function validateOstDataset(records: OstRecord[]): string[] {
     }
     if (!record.audioUrl.startsWith('http')) {
       issues.push(`Audio URL must be absolute for OST ${record.id}.`)
+    }
+  }
+
+  return issues
+}
+
+export function validateHeroIdentityDataset(records: HeroIdentityRecord[]): string[] {
+  const issues: string[] = []
+  const ids = new Set<string>()
+
+  for (const record of records) {
+    if (!record.id.trim()) {
+      issues.push('A hero identity record is missing an id.')
+    }
+    if (ids.has(record.id)) {
+      issues.push(`Duplicate hero identity id found: ${record.id}`)
+    }
+    ids.add(record.id)
+
+    if (!record.heroId.trim()) {
+      issues.push(`Missing hero id for identity record ${record.id}.`)
+    }
+    if (!record.heroName.trim()) {
+      issues.push(`Missing hero name for identity record ${record.id}.`)
+    }
+    if (!record.identity.trim()) {
+      issues.push(`Missing identity text for hero ${record.id}.`)
+    }
+    if (!record.imageUrl.startsWith('http')) {
+      issues.push(`Image URL must be absolute for hero identity ${record.id}.`)
     }
   }
 
