@@ -5,7 +5,7 @@ A fun little trivia web app for guessing heroes and skins from splash art, or gu
 
 ## Release Highlights
 
-- **V1.5.X**: Added Hero Relationship mode. Players get directional relationship clues with hero portrait + name context, then guess the related hero (typed or portrait-enabled multiple choice). Added dedicated relationship ingestion pipeline sourced from the official relationship data feed.
+- **V1.5.X**: Added Hero Gallery. Added Hero Relationship mode. Players get directional relationship clues with hero portrait + name context, then guess the related hero (typed or portrait-enabled multiple choice). Added dedicated relationship ingestion pipeline sourced from the official relationship data feed.
 - **V1.4.X**: Added Hero Identity mode. Players see identity profile clues and guess the hero (typed or multiple choice with portrait options). Added dedicated hero identity ingestion pipeline from official hero detail API.
 - **V1.3.X**: Introduced the all-new OST Hall with soundtrack browsing, scrubber seeking, and shareable track links. Optimized qing api data loading performance. OST Hall UX polish (scroll-to-player/selection clarity).
 - **V1.2.X**: Introduced OST Trivia Mode (waveform and track card display options) and OST ingestion pipeline. Added source-isolated/selectable data pipelines (newly integrated and polished data from qing api, official capture, hybrid). Expanded Gallery Mode with clickable cards for full high definition picture view. Selectable skin sources/hybrid mode and OST visualizer polish. Expanded sharing with challenge and gallery deep links plus social-preview metadata support.
@@ -28,7 +28,8 @@ For immediate values, open: https://hoktrivia.netlify.app/metrics/summary
 ## Visuals: Game/Gallery/OST Hall
 
 ### Trivia Mode Home Page
-<img width="1902" height="941" alt="image" src="https://github.com/user-attachments/assets/dfd52c9f-8bca-4d23-9bc4-21039b64bf74" />
+<!-- <img width="1902" height="941" alt="image" src="https://github.com/user-attachments/assets/dfd52c9f-8bca-4d23-9bc4-21039b64bf74" /> -->
+<img width="1899" height="939" alt="image" src="https://github.com/user-attachments/assets/58942ef3-1d57-4b53-a6d6-724f935937ae" />
 
 
 ### Trivia Mode Game Page
@@ -42,13 +43,22 @@ For immediate values, open: https://hoktrivia.netlify.app/metrics/summary
 #### Track Artwork
 <img width="1902" height="940" alt="image" src="https://github.com/user-attachments/assets/c17ca858-d347-4a8e-98d9-e7d9e3797b41" />
 
+### Lore Challenge Trivia Mode Game Page
+<img width="1914" height="933" alt="image" src="https://github.com/user-attachments/assets/3ceed0f8-e1da-4ded-a18a-d6c5abf8739d" />
+
+### Relationship Challenge Trivia Mode Game Page
+<img width="1899" height="936" alt="image" src="https://github.com/user-attachments/assets/87a325c9-4edc-4af4-b0e3-401fd1ccd0c5" />
+
 
 ### Gallery Mode
-#### Main Gallery
-<img width="1902" height="941" alt="image" src="https://github.com/user-attachments/assets/5b221e84-5291-47b7-9e89-30285e87a540" />
+#### Skin Gallery
+<img width="1900" height="936" alt="image" src="https://github.com/user-attachments/assets/9da04828-66d3-4d58-bbf4-a8374f555e35" />
 
 #### Gallery Card
 <img width="1902" height="938" alt="image" src="https://github.com/user-attachments/assets/d30f81c0-a18b-493a-bc5c-33aeec9f8a52" />
+
+#### Hero Gallery
+<img width="1894" height="933" alt="image" src="https://github.com/user-attachments/assets/6cbd25d5-ba31-4fdb-9ee4-02ded6712f98" />
 
 
 ### OST Hall
@@ -87,7 +97,8 @@ For immediate values, open: https://hoktrivia.netlify.app/metrics/summary
   - 5 Minute Hard (+1 correct, -1 wrong)
   - Sudden Death (first wrong ends the run)
 - Gallery mode:
-  - Separate non-game skin gallery for browsing artwork
+  - Separate non-game hero gallery for browsing artwork
+  - Separate non-game skin gallery for browsing artwork and sharing
   - Source selector (Official, qing translated, or Hybrid)
 - OST Hall:
   - Dedicated soundtrack browsing view with artwork cards
