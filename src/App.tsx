@@ -2234,6 +2234,7 @@ function App() {
           <article className="question-card">
             {game.question.mediaType === 'image' && (
               <img
+                className="question-main-image"
                 src={game.question.imageUrl}
                 alt={`Skin artwork prompt ${game.question.id}`}
                 loading="eager"
@@ -2432,7 +2433,7 @@ function App() {
                       )}
                       {!identityRecord?.imageUrl && relationshipImageUrl && (
                         <img
-                          className="identity-option-image"
+                          className="relationship-option-image"
                           src={relationshipImageUrl}
                           alt={`Hero portrait ${option}`}
                           loading="eager"
