@@ -166,9 +166,18 @@ interface Option<TValue extends string> {
   disabled?: boolean
 }
 
-type ViewMode = 'play' | 'gallery' | 'ost-hall'
+type ViewMode = 'play' | 'gallery' | 'ost-hall' | 'hero-gallery'
+type HeroGalleryEntry = {
+  heroId: string
+  heroName: string
+  imageUrl: string
+  outgoingCount: number
+  incomingCount: number
+  totalConnections: number
+  relatedHeroes: string[]
+}
 const WAVE_BARS = 40
-const APP_VERSION_LABEL = 'V1.5.0'
+const APP_VERSION_LABEL = 'V1.5.1'
 const IMAGE_PRELOAD_HOSTS = [
   'https://world.honorofkings.com',
   'https://game.gtimg.cn',
@@ -527,6 +536,16 @@ function resolveInitialRouteState(): InitialRouteState {
     }
   }
 
+  if (requestedView === 'hero-gallery') {
+    return {
+      viewMode: 'hero-gallery',
+      config: defaultConfig,
+      incomingChallenge: null,
+      selectedGallerySkin: null,
+      hallTrackId: OST_TRACKS[0]?.id ?? '',
+    }
+  }
+
   if (params.get('challenge') === '1') {
     const targetParam = params.get('target')
     const sourceParam = params.get('source')
@@ -652,6 +671,7 @@ function App() {
   const [selectedGallerySkin, setSelectedGallerySkin] = useState<SkinRecord | null>(
     initialRouteState.selectedGallerySkin,
   )
+  const [selectedGalleryHero, setSelectedGalleryHero] = useState<HeroGalleryEntry | null>(null)
   const [waveHeights, setWaveHeights] = useState<number[]>(() =>
     createInitialWaveHeights(),
   )
@@ -760,6 +780,68 @@ function App() {
       ),
     [selectedSkinPool],
   )
+  const heroGalleryEntries = useMemo(() => {
+    const byHero = new Map<
+      string,
+      {
+        heroId: string
+        heroName: string
+        imageUrl: string
+        outgoingCount: number
+        incomingCount: number
+        relatedHeroes: Set<string>
+      }
+    >()
+
+    const getOrCreate = (heroId: string, heroName: string, imageUrl: string) => {
+      const key = heroId || heroName.toLowerCase()
+      let entry = byHero.get(key)
+      if (!entry) {
+        entry = {
+          heroId: heroId || heroName,
+          heroName,
+          imageUrl,
+          outgoingCount: 0,
+          incomingCount: 0,
+          relatedHeroes: new Set<string>(),
+        }
+        byHero.set(key, entry)
+      } else if (!entry.imageUrl && imageUrl) {
+        entry.imageUrl = imageUrl
+      }
+      return entry
+    }
+
+    for (const record of HERO_RELATIONSHIP_RECORDS) {
+      const hero = getOrCreate(record.heroId, record.heroName, record.heroImageUrl)
+      const related = getOrCreate(
+        record.relatedHeroId,
+        record.relatedHeroName,
+        record.relatedHeroImageUrl,
+      )
+
+      hero.outgoingCount += 1
+      related.incomingCount += 1
+      hero.relatedHeroes.add(record.relatedHeroName)
+      related.relatedHeroes.add(record.heroName)
+    }
+
+    for (const record of HERO_IDENTITY_RECORDS) {
+      getOrCreate(record.heroId, record.heroName, record.imageUrl)
+    }
+
+    return [...byHero.values()]
+      .map((entry) => ({
+        heroId: entry.heroId,
+        heroName: entry.heroName,
+        imageUrl: entry.imageUrl,
+        outgoingCount: entry.outgoingCount,
+        incomingCount: entry.incomingCount,
+        totalConnections: entry.outgoingCount + entry.incomingCount,
+        relatedHeroes: [...entry.relatedHeroes].sort((a, b) => a.localeCompare(b)),
+      }))
+      .sort((left, right) => left.heroName.localeCompare(right.heroName))
+  }, [])
   const gameStatus = game?.status ?? 'ended'
   const gameDeadlineMs = game?.deadlineMs ?? null
   const selectedHallTrack = useMemo(
@@ -951,12 +1033,32 @@ function App() {
   }, [viewMode, config.skinSource, gallerySkins])
 
   useEffect(() => {
+    if (viewMode !== 'hero-gallery') {
+      return
+    }
+
+    for (const hero of heroGalleryEntries.slice(0, 16)) {
+      if (hero.imageUrl) {
+        primeImage(hero.imageUrl)
+      }
+    }
+  }, [viewMode, heroGalleryEntries])
+
+  useEffect(() => {
     if (!selectedGallerySkin) {
       return
     }
 
     primeImage(selectedGallerySkin.imageUrl)
   }, [selectedGallerySkin])
+
+  useEffect(() => {
+    if (!selectedGalleryHero) {
+      return
+    }
+
+    primeImage(selectedGalleryHero.imageUrl)
+  }, [selectedGalleryHero])
 
   useEffect(() => {
     if (viewMode !== 'ost-hall') {
@@ -1005,6 +1107,7 @@ function App() {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setSelectedGallerySkin(null)
+        setSelectedGalleryHero(null)
         const params = new URLSearchParams(window.location.search)
         params.delete('skin')
         const query = params.toString()
@@ -1632,6 +1735,7 @@ function App() {
     setShareFeedback(null)
     setTypedGuess('')
     setSelectedGallerySkin(null)
+    setSelectedGalleryHero(null)
 
     replaceUrlParams((params) => {
       params.set('view', 'gallery')
@@ -1657,6 +1761,7 @@ function App() {
     setShareFeedback(null)
     setTypedGuess('')
     setSelectedGallerySkin(null)
+    setSelectedGalleryHero(null)
 
     const hallTrackId = getValidOstTrackId(selectedHallTrackId)
     if (hallTrackId && hallTrackId !== selectedHallTrackId) {
@@ -1688,12 +1793,39 @@ function App() {
     setSetupError(null)
     setShareFeedback(null)
     setSelectedGallerySkin(null)
+    setSelectedGalleryHero(null)
 
     replaceUrlParams((params) => {
       params.set('view', 'play')
       params.delete('source')
       params.delete('skin')
       params.delete('track')
+    })
+  }
+
+  const openHeroGallery = () => {
+    setViewMode('hero-gallery')
+    setGame(null)
+    setFeedback(null)
+    setSetupError(null)
+    setShareFeedback(null)
+    setTypedGuess('')
+    setSelectedGallerySkin(null)
+    setSelectedGalleryHero(null)
+
+    replaceUrlParams((params) => {
+      params.set('view', 'hero-gallery')
+      params.delete('source')
+      params.delete('skin')
+      params.delete('track')
+      params.delete('challenge')
+      params.delete('target')
+      params.delete('answer')
+      params.delete('scoring')
+      params.delete('score')
+      params.delete('correct')
+      params.delete('wrong')
+      params.delete('best')
     })
   }
 
@@ -1972,6 +2104,17 @@ function App() {
             onClick={openGallery}
           >
             Skin Gallery
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'hero-gallery'}
+            className={
+              viewMode === 'hero-gallery' ? 'switch-button active' : 'switch-button'
+            }
+            onClick={openHeroGallery}
+          >
+            Hero Gallery
           </button>
           <button
             type="button"
@@ -2760,6 +2903,54 @@ function App() {
         </section>
       )}
 
+      {viewMode === 'hero-gallery' && (
+        <section className="panel hero-gallery-panel">
+          <div className="gallery-head">
+            <h2>Hero Gallery</h2>
+            <p className="result-subtitle">
+              Browse hero portraits and relationship network presence.
+            </p>
+            <div className="chip">Heroes: {heroGalleryEntries.length}</div>
+          </div>
+
+          {heroGalleryEntries.length === 0 && (
+            <p className="result-subtitle setup-error">
+              No hero relationship data loaded yet. Run ingest:hero-relationships:all to enable
+              Hero Gallery.
+            </p>
+          )}
+
+          {heroGalleryEntries.length > 0 && (
+            <div className="hero-gallery-grid">
+              {heroGalleryEntries.map((hero, index) => (
+                <article key={hero.heroId} className="hero-gallery-card">
+                  <button
+                    type="button"
+                    className="hero-gallery-button"
+                    onClick={() => setSelectedGalleryHero(hero)}
+                  >
+                    <img
+                      src={hero.imageUrl}
+                      alt={`Hero portrait ${hero.heroName}`}
+                      loading={index < 10 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      fetchPriority={index < 10 ? 'high' : 'auto'}
+                    />
+                    <div className="gallery-meta">
+                      <p className="gallery-skin">{hero.heroName}</p>
+                      <p className="gallery-hero">
+                        Connections: {hero.totalConnections} ({hero.outgoingCount} out /{' '}
+                        {hero.incomingCount} in)
+                      </p>
+                    </div>
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {selectedGallerySkin && (
         <div
           className="gallery-lightbox"
@@ -2795,6 +2986,48 @@ function App() {
             <div className="gallery-lightbox-meta">
               <p>{selectedGallerySkin.skinName}</p>
               <p>{selectedGallerySkin.heroName}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedGalleryHero && (
+        <div
+          className="gallery-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Hero preview"
+          onClick={() => setSelectedGalleryHero(null)}
+        >
+          <div
+            className="gallery-lightbox-card hero-lightbox-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="gallery-lightbox-actions">
+              <button
+                type="button"
+                className="gallery-lightbox-close"
+                onClick={() => setSelectedGalleryHero(null)}
+              >
+                Close
+              </button>
+            </div>
+            <img
+              src={selectedGalleryHero.imageUrl}
+              alt={`Hero portrait ${selectedGalleryHero.heroName}`}
+            />
+            <div className="gallery-lightbox-meta">
+              <p>{selectedGalleryHero.heroName}</p>
+              <p>
+                Connections: {selectedGalleryHero.totalConnections} ({selectedGalleryHero.outgoingCount}{' '}
+                out / {selectedGalleryHero.incomingCount} in)
+              </p>
+            </div>
+            <div className="hero-lightbox-related">
+              <p className="hero-lightbox-related-title">Related Heroes</p>
+              <p className="hero-lightbox-related-list">
+                {selectedGalleryHero.relatedHeroes.slice(0, 24).join(', ') || 'No related heroes.'}
+              </p>
             </div>
           </div>
         </div>
