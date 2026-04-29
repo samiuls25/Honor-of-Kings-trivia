@@ -26,7 +26,11 @@
     "ingest:hero-identity:extract": "node scripts/ingest/from-hero-identity.mjs",
     "ingest:hero-identity:validate": "node scripts/ingest/validate-hero-identity.mjs",
     "ingest:hero-identity:generate": "node scripts/ingest/generate-hero-identity-ts.mjs",
-    "ingest:hero-identity:all": "npm run ingest:hero-identity:extract && npm run ingest:hero-identity:validate && npm run ingest:hero-identity:generate"
+    "ingest:hero-identity:all": "npm run ingest:hero-identity:extract && npm run ingest:hero-identity:validate && npm run ingest:hero-identity:generate",
+    "ingest:hero-relationships:extract": "node scripts/ingest/from-hero-relationships.mjs",
+    "ingest:hero-relationships:validate": "node scripts/ingest/validate-hero-relationships.mjs",
+    "ingest:hero-relationships:generate": "node scripts/ingest/generate-hero-relationships-ts.mjs",
+    "ingest:hero-relationships:all": "npm run ingest:hero-relationships:extract && npm run ingest:hero-relationships:validate && npm run ingest:hero-relationships:generate"
   },
   "dependencies": {
     "@netlify/blobs": "^10.0.7",
