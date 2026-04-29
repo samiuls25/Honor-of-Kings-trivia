@@ -107,7 +107,6 @@ const extractCallArguments = (source, marker) => {
 
 const parseFunctionArrayArguments = (source, marker) => {
   const literal = extractCallArguments(source, marker)
-  // eslint-disable-next-line no-new-func
   return Function(`"use strict"; return ([${literal}])`)()
 }
 
@@ -139,7 +138,7 @@ const normalizeRoles = (rawRoles) => {
 
     const id = toCleanString(entry[0])
     const name = normalizeText(entry[1])
-    const imageUrl = toAbsoluteUrl(entry[2])
+    const imageUrl = toAbsoluteUrl(entry[3])
 
     if (!id || !name) {
       failures.push({ reason: 'role-missing-id-name', index, entry })

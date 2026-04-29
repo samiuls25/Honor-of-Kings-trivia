@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HERO_IDENTITY_DATASET_META, HERO_IDENTITY_RECORDS } from './data/heroIdentity'
+import {
+  HERO_RELATIONSHIP_DATASET_META,
+  HERO_RELATIONSHIP_RECORDS,
+} from './data/heroRelationships'
 import { OST_DATASET_META, OST_TRACKS } from './data/ost'
 import {
   SKINS_HYBRID,
@@ -17,6 +21,7 @@ import {
   shouldEndAfterAnswer,
   shuffle,
   validateHeroIdentityDataset,
+  validateHeroRelationshipDataset,
   validateOstDataset,
   validateSkinDataset,
 } from './game/engine'
@@ -163,7 +168,7 @@ interface Option<TValue extends string> {
 
 type ViewMode = 'play' | 'gallery' | 'ost-hall'
 const WAVE_BARS = 40
-const APP_VERSION_LABEL = 'V1.4.0'
+const APP_VERSION_LABEL = 'V1.5.0'
 const IMAGE_PRELOAD_HOSTS = [
   'https://world.honorofkings.com',
   'https://game.gtimg.cn',
@@ -254,7 +259,8 @@ function isGuessTarget(value: string | null): value is GuessTarget {
     value === 'hero-name' ||
     value === 'skin-name' ||
     value === 'ost-title' ||
-    value === 'hero-identity'
+    value === 'hero-identity' ||
+    value === 'hero-relationship'
   )
 }
 
@@ -369,6 +375,7 @@ function waveZoneClass(index: number): 'wave-bar bass' | 'wave-bar mid' | 'wave-
 function buildTargetOptions(
   hasOstTracks: boolean,
   hasHeroIdentityRecords: boolean,
+  hasHeroRelationshipRecords: boolean,
 ): Option<GuessTarget>[] {
   return [
     {
@@ -396,6 +403,14 @@ function buildTargetOptions(
         ? 'An identity profile is shown. Identify the hero.'
         : 'Load hero identity data first (run ingest:hero-identity:all) to enable this mode.',
       disabled: !hasHeroIdentityRecords,
+    },
+    {
+      value: 'hero-relationship',
+      label: 'Guess Hero by Relationship',
+      description: hasHeroRelationshipRecords
+        ? 'A hero + relationship clue is shown. Identify the related hero.'
+        : 'Load hero relationship data first (run ingest:hero-relationships:all) to enable this mode.',
+      disabled: !hasHeroRelationshipRecords,
     },
   ]
 }
@@ -583,7 +598,18 @@ function poolForTarget(target: GuessTarget, skinSource: SkinDataSource): TriviaR
     return HERO_IDENTITY_RECORDS
   }
 
+  if (target === 'hero-relationship') {
+    return HERO_RELATIONSHIP_RECORDS
+  }
+
   return skinPoolForSource(skinSource)
+}
+
+function getRecordImageUrl(record: TriviaRecord): string {
+  if ('imageUrl' in record) {
+    return record.imageUrl
+  }
+  return record.heroImageUrl
 }
 
 function buildInitialGame(config: GameConfig): ActiveGame {
@@ -669,9 +695,11 @@ function App() {
 
   const hasOstTracks = OST_TRACKS.length > 0
   const hasHeroIdentityRecords = HERO_IDENTITY_RECORDS.length > 0
+  const hasHeroRelationshipRecords = HERO_RELATIONSHIP_RECORDS.length > 0
   const targetOptions = useMemo(
-    () => buildTargetOptions(hasOstTracks, hasHeroIdentityRecords),
-    [hasHeroIdentityRecords, hasOstTracks],
+    () =>
+      buildTargetOptions(hasOstTracks, hasHeroIdentityRecords, hasHeroRelationshipRecords),
+    [hasHeroIdentityRecords, hasHeroRelationshipRecords, hasOstTracks],
   )
   const selectedSkinPool = useMemo(
     () => skinPoolForSource(config.skinSource),
@@ -684,6 +712,18 @@ function App() {
     }
     return map
   }, [])
+  const relationshipHeroImageByName = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const record of HERO_RELATIONSHIP_RECORDS) {
+      if (record.heroName && record.heroImageUrl && !map.has(record.heroName)) {
+        map.set(record.heroName, record.heroImageUrl)
+      }
+      if (record.relatedHeroName && record.relatedHeroImageUrl && !map.has(record.relatedHeroName)) {
+        map.set(record.relatedHeroName, record.relatedHeroImageUrl)
+      }
+    }
+    return map
+  }, [])
   const skinDatasetIssues = useMemo(
     () => validateSkinDataset(selectedSkinPool),
     [selectedSkinPool],
@@ -693,13 +733,23 @@ function App() {
     () => validateHeroIdentityDataset(HERO_IDENTITY_RECORDS),
     [],
   )
+  const heroRelationshipDatasetIssues = useMemo(
+    () => validateHeroRelationshipDataset(HERO_RELATIONSHIP_RECORDS),
+    [],
+  )
   const datasetIssues = useMemo(
     () => [
       ...skinDatasetIssues,
       ...ostDatasetIssues.map((issue) => `OST: ${issue}`),
       ...heroIdentityDatasetIssues.map((issue) => `Hero Identity: ${issue}`),
+      ...heroRelationshipDatasetIssues.map((issue) => `Hero Relationship: ${issue}`),
     ],
-    [heroIdentityDatasetIssues, ostDatasetIssues, skinDatasetIssues],
+    [
+      heroIdentityDatasetIssues,
+      heroRelationshipDatasetIssues,
+      ostDatasetIssues,
+      skinDatasetIssues,
+    ],
   )
   const gallerySkins = useMemo(
     () =>
@@ -849,7 +899,11 @@ function App() {
       return
     }
 
-    if (game.question.mediaType === 'image' || game.question.mediaType === 'identity') {
+    if (
+      game.question.mediaType === 'image' ||
+      game.question.mediaType === 'identity' ||
+      game.question.mediaType === 'relationship'
+    ) {
       primeImage(game.question.imageUrl)
     }
 
@@ -862,6 +916,15 @@ function App() {
       }
     }
 
+    if (game.question.mediaType === 'relationship') {
+      for (const option of game.question.options) {
+        const relationshipImageUrl = relationshipHeroImageByName.get(option)
+        if (relationshipImageUrl) {
+          primeImage(relationshipImageUrl)
+        }
+      }
+    }
+
     const lookahead = 3
     for (
       let cursor = game.queueIndex + 1;
@@ -869,11 +932,12 @@ function App() {
       cursor += 1
     ) {
       const nextRecord = game.queue[cursor]
-      if (nextRecord.imageUrl) {
-        primeImage(nextRecord.imageUrl)
+      const nextImageUrl = getRecordImageUrl(nextRecord)
+      if (nextImageUrl) {
+        primeImage(nextImageUrl)
       }
     }
-  }, [game, heroIdentityByName])
+  }, [game, heroIdentityByName, relationshipHeroImageByName])
 
   useEffect(() => {
     if (viewMode !== 'gallery') {
@@ -1354,7 +1418,9 @@ function App() {
     const shareUrl = buildChallengeShareUrl(game)
     const modeSummary = [
       getModeLabel(targetOptions, game.config.target),
-      game.config.target === 'ost-title' || game.config.target === 'hero-identity'
+      game.config.target === 'ost-title' ||
+      game.config.target === 'hero-identity' ||
+      game.config.target === 'hero-relationship'
         ? null
         : getModeLabel(skinSourceOptions, game.config.skinSource),
       getModeLabel(answerModeOptions, game.config.answerMode),
@@ -1975,6 +2041,7 @@ function App() {
                     config.target === option.value ? 'option-card active' : 'option-card',
                     option.value === 'ost-title' ? 'option-card-ost' : '',
                     option.value === 'hero-identity' ? 'option-card-identity' : '',
+                    option.value === 'hero-relationship' ? 'option-card-relationship' : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
@@ -1998,6 +2065,9 @@ function App() {
                   {option.value === 'hero-identity' && (
                     <span className="ost-chip">Lore Challenge</span>
                   )}
+                  {option.value === 'hero-relationship' && (
+                    <span className="ost-chip">Bond Challenge</span>
+                  )}
                   <span className="title">{option.label}</span>
                   <span className="description">{option.description}</span>
                 </button>
@@ -2007,7 +2077,9 @@ function App() {
 
           <div className="setting-group">
             <h3>Skin Dataset Source</h3>
-            {(config.target === 'ost-title' || config.target === 'hero-identity') && (
+            {(config.target === 'ost-title' ||
+              config.target === 'hero-identity' ||
+              config.target === 'hero-relationship') && (
               <p className="result-subtitle">
                 Skin source is disabled for non-skin challenge targets.
               </p>
@@ -2018,7 +2090,9 @@ function App() {
                   key={option.value}
                   type="button"
                   disabled={
-                    config.target === 'ost-title' || config.target === 'hero-identity'
+                    config.target === 'ost-title' ||
+                    config.target === 'hero-identity' ||
+                    config.target === 'hero-relationship'
                   }
                   className={
                     config.skinSource === option.value
@@ -2029,7 +2103,8 @@ function App() {
                     setConfig((previous) => {
                       if (
                         previous.target === 'ost-title' ||
-                        previous.target === 'hero-identity'
+                        previous.target === 'hero-identity' ||
+                        previous.target === 'hero-relationship'
                       ) {
                         return previous
                       }
@@ -2101,18 +2176,26 @@ function App() {
           </div>
 
           <div className="setup-footer">
-            <p>
-              {config.target === 'ost-title' || config.target === 'hero-identity'
-                ? 'Selected skin source is not used in this challenge target.'
-                : `Selected skin source: ${getModeLabel(skinSourceOptions, config.skinSource)} (${SKIN_SOURCE_META[config.skinSource].items} entries).`}
-            </p>
-            <p>
-              OST dataset: {OST_DATASET_META.items} tracks from {OST_DATASET_META.source}.
-            </p>
-            <p>
-              Hero identity dataset: {HERO_IDENTITY_DATASET_META.items} profiles from{' '}
-              {HERO_IDENTITY_DATASET_META.source}.
-            </p>
+            <div className="setup-footer-meta">
+              <p>
+                {config.target === 'ost-title' ||
+                config.target === 'hero-identity' ||
+                config.target === 'hero-relationship'
+                  ? 'Selected skin source is not used in this challenge target.'
+                  : `Selected skin source: ${getModeLabel(skinSourceOptions, config.skinSource)} (${SKIN_SOURCE_META[config.skinSource].items} entries).`}
+              </p>
+              <p>
+                OST dataset: {OST_DATASET_META.items} tracks from {OST_DATASET_META.source}.
+              </p>
+              <p>
+                Hero identity dataset: {HERO_IDENTITY_DATASET_META.items} profiles from{' '}
+                {HERO_IDENTITY_DATASET_META.source}.
+              </p>
+              <p>
+                Hero relationship dataset: {HERO_RELATIONSHIP_DATASET_META.items} links from{' '}
+                {HERO_RELATIONSHIP_DATASET_META.source}.
+              </p>
+            </div>
             <button className="primary-button" onClick={startGame}>
               Start Match
             </button>
@@ -2139,7 +2222,9 @@ function App() {
 
           <div className="mode-row">
             <span>{getModeLabel(targetOptions, game.config.target)}</span>
-            {game.config.target !== 'ost-title' && game.config.target !== 'hero-identity' && (
+            {game.config.target !== 'ost-title' &&
+              game.config.target !== 'hero-identity' &&
+              game.config.target !== 'hero-relationship' && (
               <span>{getModeLabel(skinSourceOptions, game.config.skinSource)}</span>
             )}
             <span>{getModeLabel(answerModeOptions, game.config.answerMode)}</span>
@@ -2251,6 +2336,29 @@ function App() {
               </div>
             )}
 
+            {game.question.mediaType === 'relationship' && game.question.relationshipHint && (
+              <div className="relationship-stage">
+                <p className="identity-label">Relationship Profile</p>
+                <img
+                  src={game.question.relationshipHint.heroImageUrl}
+                  alt={`Hero portrait ${game.question.relationshipHint.heroName}`}
+                  className="relationship-hero-image"
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                />
+                <p className="relationship-hero-name">{game.question.relationshipHint.heroName}</p>
+                <p className="relationship-label">
+                  Relationship: {game.question.relationshipHint.relation}
+                </p>
+                {game.question.relationshipHint.relationDescription && (
+                  <p className="relationship-description">
+                    {game.question.relationshipHint.relationDescription}
+                  </p>
+                )}
+              </div>
+            )}
+
             <h2>{game.question.prompt}</h2>
 
             {game.config.answerMode === 'typed' && (
@@ -2271,6 +2379,8 @@ function App() {
                         ? 'Type skin name'
                         : game.config.target === 'hero-identity'
                           ? 'Type hero name'
+                          : game.config.target === 'hero-relationship'
+                            ? 'Type related hero name'
                           : 'Type track title'
                   }
                   autoFocus
@@ -2292,13 +2402,18 @@ function App() {
                     game.config.target === 'hero-identity'
                       ? heroIdentityByName.get(option)
                       : null
+                  const relationshipImageUrl =
+                    game.config.target === 'hero-relationship'
+                      ? relationshipHeroImageByName.get(option)
+                      : null
 
                   return (
                     <button
                       key={option}
                       type="button"
                       className={
-                        game.config.target === 'hero-identity'
+                        game.config.target === 'hero-identity' ||
+                        game.config.target === 'hero-relationship'
                           ? 'option-card option-card-hero-identity'
                           : 'option-card'
                       }
@@ -2309,6 +2424,16 @@ function App() {
                         <img
                           className="identity-option-image"
                           src={identityRecord.imageUrl}
+                          alt={`Hero portrait ${option}`}
+                          loading="eager"
+                          fetchPriority="high"
+                          decoding="async"
+                        />
+                      )}
+                      {!identityRecord?.imageUrl && relationshipImageUrl && (
+                        <img
+                          className="identity-option-image"
+                          src={relationshipImageUrl}
                           alt={`Hero portrait ${option}`}
                           loading="eager"
                           fetchPriority="high"

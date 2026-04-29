@@ -2,6 +2,7 @@ import type {
   GameConfig,
   GuessTarget,
   HeroIdentityRecord,
+  HeroRelationshipRecord,
   OstRecord,
   Question,
   ScoringStyle,
@@ -111,6 +112,10 @@ function isHeroIdentityRecord(record: TriviaRecord): record is HeroIdentityRecor
   return 'identity' in record && 'heroId' in record && !('skinName' in record)
 }
 
+function isHeroRelationshipRecord(record: TriviaRecord): record is HeroRelationshipRecord {
+  return 'relation' in record && 'relatedHeroName' in record
+}
+
 function answerForTarget(record: TriviaRecord, target: GuessTarget): string {
   if (target === 'ost-title') {
     return isOstRecord(record) ? record.trackTitle : ''
@@ -118,6 +123,10 @@ function answerForTarget(record: TriviaRecord, target: GuessTarget): string {
 
   if (target === 'hero-identity') {
     return isHeroIdentityRecord(record) ? record.heroName : ''
+  }
+
+  if (target === 'hero-relationship') {
+    return isHeroRelationshipRecord(record) ? record.relatedHeroName : ''
   }
 
   if (!isSkinRecord(record)) {
@@ -140,6 +149,13 @@ function acceptedAnswersForTarget(record: TriviaRecord, target: GuessTarget): st
       return []
     }
     return uniqueNormalized([record.heroName, ...record.heroAliases])
+  }
+
+  if (target === 'hero-relationship') {
+    if (!isHeroRelationshipRecord(record)) {
+      return []
+    }
+    return uniqueNormalized([record.relatedHeroName, ...record.relatedHeroAliases])
   }
 
   if (!isSkinRecord(record)) {
@@ -190,6 +206,9 @@ export function createQuestion(
     if (config.target === 'hero-identity') {
       return 'Which hero matches this identity profile?'
     }
+    if (config.target === 'hero-relationship') {
+      return 'Which hero matches this relationship clue?'
+    }
     return 'What is the title of this Honor of Kings track?'
   })()
 
@@ -205,16 +224,28 @@ export function createQuestion(
     ? 'audio'
     : isHeroIdentityRecord(record)
       ? 'identity'
+      : isHeroRelationshipRecord(record)
+        ? 'relationship'
       : 'image'
   const audioUrl = isOstRecord(record) ? record.audioUrl : null
   const identityHint = isHeroIdentityRecord(record) ? record.identity : null
+  const relationshipHint = isHeroRelationshipRecord(record)
+    ? {
+        heroName: record.heroName,
+        heroImageUrl: record.heroImageUrl,
+        relation: record.relation,
+        relationDescription: record.relationDescription,
+      }
+    : null
+  const imageUrl = isHeroRelationshipRecord(record) ? record.heroImageUrl : record.imageUrl
 
   return {
     id: `${record.id}-${config.target}-${config.answerMode}`,
     recordId: record.id,
-    imageUrl: record.imageUrl,
+    imageUrl,
     audioUrl,
     identityHint,
+    relationshipHint,
     mediaType,
     prompt,
     target: config.target,
@@ -418,6 +449,36 @@ export function validateHeroIdentityDataset(records: HeroIdentityRecord[]): stri
     }
     if (!record.imageUrl.startsWith('http')) {
       issues.push(`Image URL must be absolute for hero identity ${record.id}.`)
+    }
+  }
+
+  return issues
+}
+
+export function validateHeroRelationshipDataset(records: HeroRelationshipRecord[]): string[] {
+  const issues: string[] = []
+  const ids = new Set<string>()
+
+  for (const record of records) {
+    if (!record.id.trim()) {
+      issues.push('A hero relationship record is missing an id.')
+    }
+    if (ids.has(record.id)) {
+      issues.push(`Duplicate hero relationship id found: ${record.id}`)
+    }
+    ids.add(record.id)
+
+    if (!record.heroId.trim() || !record.relatedHeroId.trim()) {
+      issues.push(`Missing hero ids for relationship record ${record.id}.`)
+    }
+    if (!record.heroName.trim() || !record.relatedHeroName.trim()) {
+      issues.push(`Missing hero names for relationship record ${record.id}.`)
+    }
+    if (!record.relation.trim()) {
+      issues.push(`Missing relationship label for record ${record.id}.`)
+    }
+    if (!record.heroImageUrl.startsWith('http') || !record.relatedHeroImageUrl.startsWith('http')) {
+      issues.push(`Image URL must be absolute for relationship ${record.id}.`)
     }
   }
 

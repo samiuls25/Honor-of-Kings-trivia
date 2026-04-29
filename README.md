@@ -5,6 +5,7 @@ A fun little trivia web app for guessing heroes and skins from splash art, or gu
 
 ## Release Highlights
 
+- **V1.5.X**: Added Hero Relationship mode. Players get directional relationship clues with hero portrait + name context, then guess the related hero (typed or portrait-enabled multiple choice). Added dedicated relationship ingestion pipeline sourced from the official relationship data feed.
 - **V1.4.X**: Added Hero Identity mode. Players see identity profile clues and guess the hero (typed or multiple choice with portrait options). Added dedicated hero identity ingestion pipeline from official hero detail API.
 - **V1.3.X**: Introduced the all-new OST Hall with soundtrack browsing, scrubber seeking, and shareable track links. Optimized qing api data loading performance. OST Hall UX polish (scroll-to-player/selection clarity).
 - **V1.2.X**: Introduced OST Trivia Mode (waveform and track card display options) and OST ingestion pipeline. Added source-isolated/selectable data pipelines (newly integrated and polished data from qing api, official capture, hybrid). Expanded Gallery Mode with clickable cards for full high definition picture view. Selectable skin sources/hybrid mode and OST visualizer polish. Expanded sharing with challenge and gallery deep links plus social-preview metadata support.
@@ -77,6 +78,7 @@ For immediate values, open: https://hoktrivia.netlify.app/metrics/summary
   - Guess Skin Name
   - Guess OST Track Title
   - Guess Hero by Identity
+  - Guess Hero by Relationship
 - Answer input modes:
   - Typed entry (case-insensitive, spacing-tolerant, and lightly typo-tolerant)
   - 4-option multiple choice
@@ -197,6 +199,9 @@ npm run ingest:ost:all
 
 # Hero identity profile ingest -> src/data/heroIdentity.generated.ts
 npm run ingest:hero-identity:all
+
+# Hero relationship ingest -> src/data/heroRelationships.generated.ts
+npm run ingest:hero-relationships:all
 ```
 
 `ingest:qing:all` now includes an automatic Chinese -> English translation step before validation and generation.
@@ -217,6 +222,8 @@ Output files:
 - data/processed/hero-identity.normalized.json
 - data/processed/hero-identity-meta.json
 - src/data/heroIdentity.generated.ts
+- data/processed/hero-relationships.normalized.json
+- src/data/heroRelationships.generated.ts
 
 At runtime, the app now keeps skin sources separated and lets you choose the active source in setup/gallery:
 - Official Capture (recommended quality)
@@ -278,6 +285,19 @@ Hero identity dataset shape:
 - height
 - region
 - imageUrl
+- source
+
+Hero relationship dataset shape:
+
+- id
+- heroId
+- heroName
+- heroImageUrl
+- relatedHeroId
+- relatedHeroName
+- relatedHeroImageUrl
+- relation
+- relationDescription
 - source
 
 Special thanks to qing762 for his api that provided a fuller dataset than what I originally had. API Source: https://github.com/qing762/honor-of-kings-api

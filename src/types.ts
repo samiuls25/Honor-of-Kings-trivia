@@ -1,4 +1,9 @@
-export type GuessTarget = 'hero-name' | 'skin-name' | 'ost-title' | 'hero-identity'
+export type GuessTarget =
+  | 'hero-name'
+  | 'skin-name'
+  | 'ost-title'
+  | 'hero-identity'
+  | 'hero-relationship'
 export type SkinDataSource = 'official' | 'qing-en' | 'hybrid'
 
 export type AnswerMode = 'typed' | 'multiple-choice'
@@ -50,7 +55,35 @@ export interface HeroIdentityRecord {
   source: string
 }
 
-export type TriviaRecord = SkinRecord | OstRecord | HeroIdentityRecord
+export interface HeroRelationshipRecord {
+  id: string
+  heroId: string
+  heroName: string
+  heroImageUrl: string
+  relatedHeroId: string
+  relatedHeroName: string
+  relatedHeroImageUrl: string
+  relation: string
+  relationScore: number | null
+  relationImageUrl: string
+  relationDescription: string
+  heroAliases: string[]
+  relatedHeroAliases: string[]
+  source: string
+}
+
+export type TriviaRecord =
+  | SkinRecord
+  | OstRecord
+  | HeroIdentityRecord
+  | HeroRelationshipRecord
+
+export interface RelationshipHint {
+  heroName: string
+  heroImageUrl: string
+  relation: string
+  relationDescription: string
+}
 
 export interface Question {
   id: string
@@ -58,7 +91,8 @@ export interface Question {
   imageUrl: string
   audioUrl: string | null
   identityHint: string | null
-  mediaType: 'image' | 'audio' | 'identity'
+  relationshipHint: RelationshipHint | null
+  mediaType: 'image' | 'audio' | 'identity' | 'relationship'
   prompt: string
   target: GuessTarget
   correctAnswer: string

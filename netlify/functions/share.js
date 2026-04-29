@@ -10,6 +10,7 @@ const TARGET_LABELS = {
   'skin-name': 'Guess Skin Name',
   'ost-title': 'Guess OST Track',
   'hero-identity': 'Guess Hero by Identity',
+  'hero-relationship': 'Guess Hero by Relationship',
 }
 
 const SOURCE_LABELS = {
