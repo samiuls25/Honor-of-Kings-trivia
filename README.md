@@ -177,15 +177,36 @@ Metrics persistence notes:
 - Counters begin at the time this tracking feature is deployed.
 - `share_redirect_hits` includes share endpoint hits (often social crawlers), while `share_links_visited` tracks app-side shared-link landings.
 
-## Real data ingestion workflow
+## Data ingestion workflows
 
-This project includes a real-data pipeline from exported network capture to app-ready TypeScript data.
+This project uses multiple source-isolated real-data ingestion pipelines.  
+Use the `:all` commands for the normal end-to-end flow:
 
-1. Export a capture file from browser devtools on the official skin page.
-2. Save as either:
+```bash
+# Official skins capture -> src/data/skins.generated.ts
+npm run ingest:all
+
+# Secondary skins source (qing API, translated) -> src/data/skins.qing.generated.ts
+npm run ingest:qing:all
+
+# OST playlist fetch + normalization -> src/data/ost.generated.ts
+npm run ingest:ost:all
+
+# Hero identity profiles -> src/data/heroIdentity.generated.ts
+npm run ingest:hero-identity:all
+
+# Hero relationships -> src/data/heroRelationships.generated.ts
+npm run ingest:hero-relationships:all
+```
+
+### Official skins capture workflow
+
+For the official skins dataset (`ingest:all`), export a capture file from browser devtools on the official skin page:
+
+1. Save as either:
   - data/raw/hok-skins-capture.har
   - data/raw/hok-skins-capture.json
-3. Run full pipeline:
+2. Run full pipeline:
 
 ```bash
 npm run ingest:all
@@ -197,22 +218,6 @@ You can also run steps individually:
 npm run ingest:extract
 npm run ingest:validate
 npm run ingest:generate
-```
-
-Additional source-isolated pipelines:
-
-```bash
-# Secondary skins source (qing API) -> src/data/skins.qing.generated.ts
-npm run ingest:qing:all
-
-# OST playlist fetch + normalization -> src/data/ost.generated.ts
-npm run ingest:ost:all
-
-# Hero identity profile ingest -> src/data/heroIdentity.generated.ts
-npm run ingest:hero-identity:all
-
-# Hero relationship ingest -> src/data/heroRelationships.generated.ts
-npm run ingest:hero-relationships:all
 ```
 
 `ingest:qing:all` now includes an automatic Chinese -> English translation step before validation and generation.
@@ -245,7 +250,7 @@ The app keeps source separation intact:
 - Existing website capture extractor remains primary and highest quality.
 - qing API is translated and can be selected independently (or in hybrid mode).
 - qing thumbnail crop parameters are stripped during ingest to improve image quality.
-- OST dataset is independent and never overwrites skin capture files.
+- OST, Hero Identity, and Hero Relationship datasets are independent and never overwrite skin capture files.
 
 ## OST source file format
 

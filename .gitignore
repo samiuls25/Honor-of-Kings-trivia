@@ -38,3 +38,6 @@ data/processed/*.json
 .env
 .env.*
 !.env.example
+
+# Private notes
+private-notes/
