@@ -28,6 +28,7 @@ const SCORING_LABELS = {
   'five-minute-easy': '5 Minute Easy',
   'five-minute-hard': '5 Minute Hard',
   'sudden-death': 'Sudden Death',
+  'custom-session': 'Custom Session',
 }
 
 function cleanText(input, maxLength = 120) {

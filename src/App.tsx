@@ -32,7 +32,9 @@ import {
   trackMetricEvent,
 } from './metrics'
 import type {
+  AdvanceMode,
   AnswerMode,
+  CustomSessionLimitType,
   GameConfig,
   GuessTarget,
   HeroIdentityRecord,
@@ -141,7 +143,18 @@ function ensureYouTubeIframeApi(): Promise<void> {
   return window.__ytIframeApiPromise
 }
 
-type EndReason = 'timeout' | 'wrong-answer' | 'manual' | 'completed-dataset' | null
+type EndReason =
+  | 'timeout'
+  | 'wrong-answer'
+  | 'manual'
+  | 'completed-dataset'
+  | 'custom-limit'
+  | null
+type AnswerReveal = {
+  selectedAnswer: string | null
+  correctAnswer: string
+  isCorrect: boolean
+}
 
 interface ActiveGame {
   status: 'playing' | 'ended'
@@ -177,7 +190,7 @@ type HeroGalleryEntry = {
   relatedHeroes: string[]
 }
 const WAVE_BARS = 40
-const APP_VERSION_LABEL = 'V1.5.1'
+const APP_VERSION_LABEL = 'V1.5.2'
 const IMAGE_PRELOAD_HOSTS = [
   'https://world.honorofkings.com',
   'https://game.gtimg.cn',
@@ -281,12 +294,21 @@ function isAnswerMode(value: string | null): value is AnswerMode {
   return value === 'typed' || value === 'multiple-choice'
 }
 
+function isAdvanceMode(value: string | null): value is AdvanceMode {
+  return value === 'auto' || value === 'manual'
+}
+
 function isScoringStyle(value: string | null): value is ScoringStyle {
   return (
     value === 'five-minute-easy' ||
     value === 'five-minute-hard' ||
-    value === 'sudden-death'
+    value === 'sudden-death' ||
+    value === 'custom-session'
   )
+}
+
+function isCustomSessionLimitType(value: string | null): value is CustomSessionLimitType {
+  return value === 'none' || value === 'questions' || value === 'time'
 }
 
 function parseNonNegativeInt(value: string | null): number {
@@ -302,6 +324,10 @@ function parseNonNegativeInt(value: string | null): number {
   return parsed
 }
 
+function clampInt(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
 async function verifyChallengeSignature(challenge: SharedChallenge): Promise<boolean> {
   try {
     const response = await fetch('/challenge/verify', {
@@ -314,7 +340,11 @@ async function verifyChallengeSignature(challenge: SharedChallenge): Promise<boo
         target: challenge.config.target,
         source: challenge.config.skinSource,
         answer: challenge.config.answerMode,
+        advance: challenge.config.advanceMode,
         scoring: challenge.config.scoringStyle,
+        customLimit: challenge.config.customLimitType,
+        customQuestions: challenge.config.customQuestionCount,
+        customMinutes: challenge.config.customTimeLimitMinutes,
         score: challenge.score,
         correct: challenge.correct,
         wrong: challenge.wrong,
@@ -471,13 +501,53 @@ const scoringOptions: Option<ScoringStyle>[] = [
     label: 'Sudden Death',
     description: 'Guess until your first wrong answer.',
   },
+  {
+    value: 'custom-session',
+    label: 'Custom Session',
+    description: 'Choose your own question count or timer (or unlimited).',
+  },
+]
+
+const advanceModeOptions: Option<AdvanceMode>[] = [
+  {
+    value: 'auto',
+    label: 'Auto Next',
+    description: 'Automatically move to the next question after answer reveal.',
+  },
+  {
+    value: 'manual',
+    label: 'Manual Next',
+    description: 'Review the answer result and click Next when ready.',
+  },
+]
+
+const customSessionLimitOptions: Option<CustomSessionLimitType>[] = [
+  {
+    value: 'none',
+    label: 'Unlimited',
+    description: 'No custom time or question cap.',
+  },
+  {
+    value: 'questions',
+    label: 'Question Count',
+    description: 'End the run after a chosen number of answered questions.',
+  },
+  {
+    value: 'time',
+    label: 'Time Limit',
+    description: 'Set a custom timer in minutes.',
+  },
 ]
 
 const defaultConfig: GameConfig = {
   target: 'hero-name',
   skinSource: 'official',
   answerMode: 'multiple-choice',
+  advanceMode: 'auto',
   scoringStyle: 'five-minute-easy',
+  customLimitType: 'none',
+  customQuestionCount: 20,
+  customTimeLimitMinutes: 5,
 }
 
 type InitialRouteState = {
@@ -550,7 +620,14 @@ function resolveInitialRouteState(): InitialRouteState {
     const targetParam = params.get('target')
     const sourceParam = params.get('source')
     const answerParam = params.get('answer')
+    const advanceParam = params.get('advance')
     const scoringParam = params.get('scoring')
+    const customLimitTypeParam = params.get('customLimit')
+    const customQuestionCountParam = params.get('customQuestions')
+    const customTimeMinutesParam = params.get('customMinutes')
+
+    const parsedCustomQuestions = clampInt(parseNonNegativeInt(customQuestionCountParam), 1, 999)
+    const parsedCustomMinutes = clampInt(parseNonNegativeInt(customTimeMinutesParam), 1, 999)
 
     const challengeConfig: GameConfig = {
       target: isGuessTarget(targetParam) ? targetParam : defaultConfig.target,
@@ -558,9 +635,15 @@ function resolveInitialRouteState(): InitialRouteState {
         ? sourceParam
         : defaultConfig.skinSource,
       answerMode: isAnswerMode(answerParam) ? answerParam : defaultConfig.answerMode,
+      advanceMode: isAdvanceMode(advanceParam) ? advanceParam : defaultConfig.advanceMode,
       scoringStyle: isScoringStyle(scoringParam)
         ? scoringParam
         : defaultConfig.scoringStyle,
+      customLimitType: isCustomSessionLimitType(customLimitTypeParam)
+        ? customLimitTypeParam
+        : defaultConfig.customLimitType,
+      customQuestionCount: parsedCustomQuestions || defaultConfig.customQuestionCount,
+      customTimeLimitMinutes: parsedCustomMinutes || defaultConfig.customTimeLimitMinutes,
     }
 
     return {
@@ -631,6 +714,17 @@ function getRecordImageUrl(record: TriviaRecord): string {
   return record.heroImageUrl
 }
 
+function initialTimeLimitForConfig(config: GameConfig): number | null {
+  if (config.scoringStyle === 'custom-session') {
+    if (config.customLimitType !== 'time') {
+      return null
+    }
+    return clampInt(config.customTimeLimitMinutes, 1, 999) * 60 * 1000
+  }
+
+  return initialTimeLimitMs(config.scoringStyle)
+}
+
 function buildInitialGame(config: GameConfig): ActiveGame {
   const pool = poolForTarget(config.target, config.skinSource)
   if (pool.length === 0) {
@@ -640,7 +734,7 @@ function buildInitialGame(config: GameConfig): ActiveGame {
   const queue = shuffle([...pool])
   const firstRecord = queue[0]
   const firstQuestion = createQuestion(firstRecord, config, pool)
-  const initialLimit = initialTimeLimitMs(config.scoringStyle)
+  const initialLimit = initialTimeLimitForConfig(config)
 
   return {
     status: 'playing',
@@ -665,7 +759,15 @@ function App() {
   const [config, setConfig] = useState<GameConfig>(initialRouteState.config)
   const [game, setGame] = useState<ActiveGame | null>(null)
   const [typedGuess, setTypedGuess] = useState('')
+  const [customQuestionInput, setCustomQuestionInput] = useState(
+    String(initialRouteState.config.customQuestionCount),
+  )
+  const [customMinutesInput, setCustomMinutesInput] = useState(
+    String(initialRouteState.config.customTimeLimitMinutes),
+  )
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [answerReveal, setAnswerReveal] = useState<AnswerReveal | null>(null)
+  const [awaitingNext, setAwaitingNext] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [showOstArtwork, setShowOstArtwork] = useState(false)
   const [selectedGallerySkin, setSelectedGallerySkin] = useState<SkinRecord | null>(
@@ -1484,7 +1586,11 @@ function App() {
     params.set('target', endedGame.config.target)
     params.set('source', endedGame.config.skinSource)
     params.set('answer', endedGame.config.answerMode)
+    params.set('advance', endedGame.config.advanceMode)
     params.set('scoring', endedGame.config.scoringStyle)
+    params.set('customLimit', endedGame.config.customLimitType)
+    params.set('customQuestions', String(endedGame.config.customQuestionCount))
+    params.set('customMinutes', String(endedGame.config.customTimeLimitMinutes))
     params.set('score', String(endedGame.score))
     params.set('correct', String(endedGame.correct))
     params.set('wrong', String(endedGame.wrong))
@@ -1519,6 +1625,15 @@ function App() {
     }
 
     const shareUrl = buildChallengeShareUrl(game)
+    const customSessionSummary =
+      game.config.scoringStyle !== 'custom-session'
+        ? null
+        : game.config.customLimitType === 'questions'
+          ? `${game.config.customQuestionCount} questions`
+          : game.config.customLimitType === 'time'
+            ? `${game.config.customTimeLimitMinutes} minute timer`
+            : 'Unlimited duration'
+
     const modeSummary = [
       getModeLabel(targetOptions, game.config.target),
       game.config.target === 'ost-title' ||
@@ -1527,7 +1642,9 @@ function App() {
         ? null
         : getModeLabel(skinSourceOptions, game.config.skinSource),
       getModeLabel(answerModeOptions, game.config.answerMode),
+      getModeLabel(advanceModeOptions, game.config.advanceMode),
       getModeLabel(scoringOptions, game.config.scoringStyle),
+      customSessionSummary,
     ]
       .filter(Boolean)
       .join(' | ')
@@ -1639,6 +1756,10 @@ function App() {
       params.delete('target')
       params.delete('answer')
       params.delete('scoring')
+      params.delete('advance')
+      params.delete('customLimit')
+      params.delete('customQuestions')
+      params.delete('customMinutes')
       params.delete('score')
       params.delete('correct')
       params.delete('wrong')
@@ -1657,6 +1778,8 @@ function App() {
 
   const startGame = () => {
     setFeedback(null)
+    setAnswerReveal(null)
+    setAwaitingNext(false)
     setSetupError(null)
     setShareFeedback(null)
     setTypedGuess('')
@@ -1687,6 +1810,8 @@ function App() {
       return
     }
     setFeedback(null)
+    setAnswerReveal(null)
+    setAwaitingNext(false)
     setSetupError(null)
     setShareFeedback(null)
     setTypedGuess('')
@@ -1731,6 +1856,8 @@ function App() {
     setViewMode('gallery')
     setGame(null)
     setFeedback(null)
+    setAnswerReveal(null)
+    setAwaitingNext(false)
     setSetupError(null)
     setShareFeedback(null)
     setTypedGuess('')
@@ -1746,6 +1873,10 @@ function App() {
       params.delete('target')
       params.delete('answer')
       params.delete('scoring')
+      params.delete('advance')
+      params.delete('customLimit')
+      params.delete('customQuestions')
+      params.delete('customMinutes')
       params.delete('score')
       params.delete('correct')
       params.delete('wrong')
@@ -1757,6 +1888,8 @@ function App() {
     setViewMode('ost-hall')
     setGame(null)
     setFeedback(null)
+    setAnswerReveal(null)
+    setAwaitingNext(false)
     setSetupError(null)
     setShareFeedback(null)
     setTypedGuess('')
@@ -1781,6 +1914,10 @@ function App() {
       params.delete('target')
       params.delete('answer')
       params.delete('scoring')
+      params.delete('advance')
+      params.delete('customLimit')
+      params.delete('customQuestions')
+      params.delete('customMinutes')
       params.delete('score')
       params.delete('correct')
       params.delete('wrong')
@@ -1792,6 +1929,8 @@ function App() {
     setViewMode('play')
     setSetupError(null)
     setShareFeedback(null)
+    setAnswerReveal(null)
+    setAwaitingNext(false)
     setSelectedGallerySkin(null)
     setSelectedGalleryHero(null)
 
@@ -1807,6 +1946,8 @@ function App() {
     setViewMode('hero-gallery')
     setGame(null)
     setFeedback(null)
+    setAnswerReveal(null)
+    setAwaitingNext(false)
     setSetupError(null)
     setShareFeedback(null)
     setTypedGuess('')
@@ -1822,6 +1963,10 @@ function App() {
       params.delete('target')
       params.delete('answer')
       params.delete('scoring')
+      params.delete('advance')
+      params.delete('customLimit')
+      params.delete('customQuestions')
+      params.delete('customMinutes')
       params.delete('score')
       params.delete('correct')
       params.delete('wrong')
@@ -1836,8 +1981,39 @@ function App() {
     })
   }
 
-  const submitAnswer = (rawGuess: string) => {
-    if (!game || game.status !== 'playing' || feedback) {
+  const advanceToNextQuestion = () => {
+    setGame((previous) => {
+      if (!previous || previous.status !== 'playing') {
+        return previous
+      }
+
+      const reachedPoolEnd = previous.queueIndex >= previous.queue.length - 1
+      if (reachedPoolEnd) {
+        return {
+          ...previous,
+          status: 'ended',
+          endReason: 'completed-dataset',
+        }
+      }
+
+      const queueIndex = previous.queueIndex + 1
+      const nextSkin = previous.queue[queueIndex]
+
+      return {
+        ...previous,
+        queueIndex,
+        question: createQuestion(nextSkin, previous.config, previous.queue),
+      }
+    })
+
+    setShowOstArtwork(false)
+    setFeedback(null)
+    setAnswerReveal(null)
+    setAwaitingNext(false)
+  }
+
+  const submitAnswer = (rawGuess: string, selectedOption: string | null = null) => {
+    if (!game || game.status !== 'playing' || feedback || awaitingNext) {
       return
     }
 
@@ -1849,6 +2025,12 @@ function App() {
     const isCorrect = isAnswerCorrect(trimmedGuess, game.question.acceptedAnswers)
     const scoreDelta = getScoreDelta(game.config.scoringStyle, isCorrect)
     const endOnWrong = shouldEndAfterAnswer(game.config.scoringStyle, isCorrect)
+    const answeredAfter = game.correct + game.wrong + 1
+    const customQuestionLimitReached =
+      game.config.scoringStyle === 'custom-session' &&
+      game.config.customLimitType === 'questions' &&
+      answeredAfter >= clampInt(game.config.customQuestionCount, 1, 999)
+    const shouldAdvanceNext = !endOnWrong && !customQuestionLimitReached
 
     setGame((previous) => {
       if (!previous || previous.status !== 'playing') {
@@ -1873,6 +2055,19 @@ function App() {
         }
       }
 
+      if (customQuestionLimitReached) {
+        return {
+          ...previous,
+          status: 'ended',
+          score: previous.score + scoreDelta,
+          correct,
+          wrong,
+          streak,
+          bestStreak,
+          endReason: 'custom-limit',
+        }
+      }
+
       return {
         ...previous,
         score: previous.score + scoreDelta,
@@ -1884,6 +2079,11 @@ function App() {
     })
 
     setTypedGuess('')
+    setAnswerReveal({
+      selectedAnswer: selectedOption,
+      correctAnswer: game.question.correctAnswer,
+      isCorrect,
+    })
     setFeedback(
       isCorrect
         ? 'Correct! +1 point.'
@@ -1894,34 +2094,14 @@ function App() {
       window.clearTimeout(feedbackTimeoutRef.current)
     }
 
-    if (!endOnWrong) {
+    if (shouldAdvanceNext && game.config.advanceMode === 'manual') {
+      setAwaitingNext(true)
+      return
+    }
+
+    if (shouldAdvanceNext && game.config.advanceMode === 'auto') {
       feedbackTimeoutRef.current = window.setTimeout(() => {
-        setGame((previous) => {
-          if (!previous || previous.status !== 'playing') {
-            return previous
-          }
-
-          const reachedPoolEnd = previous.queueIndex >= previous.queue.length - 1
-          if (reachedPoolEnd) {
-            return {
-              ...previous,
-              status: 'ended',
-              endReason: 'completed-dataset',
-            }
-          }
-
-          const queueIndex = previous.queueIndex + 1
-          const nextSkin = previous.queue[queueIndex]
-
-          return {
-            ...previous,
-            queueIndex,
-            question: createQuestion(nextSkin, previous.config, previous.queue),
-          }
-        })
-
-        setShowOstArtwork(false)
-        setFeedback(null)
+        advanceToNextQuestion()
       }, 850)
     }
   }
@@ -1937,6 +2117,8 @@ function App() {
             ? game?.wrong === 0
               ? 'Legendary clear: you completed the full dataset with a perfect run.'
               : 'Dataset completed: you reached the end of the full question pool.'
+          : game?.endReason === 'custom-limit'
+            ? 'Session completed: custom question limit reached.'
           : 'Session complete.'
 
   const toggleOstPlayback = () => {
@@ -2318,6 +2500,130 @@ function App() {
             </div>
           </div>
 
+          {config.scoringStyle === 'custom-session' && (
+            <div className="setting-group">
+              <h3>Custom Session Limit</h3>
+              <div className="option-grid three-col">
+                {customSessionLimitOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={
+                      config.customLimitType === option.value
+                        ? 'option-card active'
+                        : 'option-card'
+                    }
+                    onClick={() =>
+                      setConfig((previous) => ({
+                        ...previous,
+                        customLimitType: option.value,
+                      }))
+                    }
+                  >
+                    <span className="title">{option.label}</span>
+                    <span className="description">{option.description}</span>
+                  </button>
+                ))}
+              </div>
+
+              {config.customLimitType === 'questions' && (
+                <div className="custom-control-row">
+                  <label htmlFor="custom-questions">Questions</label>
+                  <input
+                    id="custom-questions"
+                    type="number"
+                    min={1}
+                    max={999}
+                    value={customQuestionInput}
+                    onChange={(event) => {
+                      const raw = event.target.value
+                      setCustomQuestionInput(raw)
+                      if (!raw.trim()) {
+                        return
+                      }
+
+                      const parsed = Number.parseInt(raw, 10)
+                      if (!Number.isFinite(parsed)) {
+                        return
+                      }
+
+                      setConfig((previous) => ({
+                        ...previous,
+                        customQuestionCount: clampInt(parsed, 1, 999),
+                      }))
+                    }}
+                    onBlur={() => {
+                      if (!customQuestionInput.trim()) {
+                        setCustomQuestionInput(String(config.customQuestionCount))
+                      }
+                    }}
+                  />
+                </div>
+              )}
+
+              {config.customLimitType === 'time' && (
+                <div className="custom-control-row">
+                  <label htmlFor="custom-minutes">Minutes</label>
+                  <input
+                    id="custom-minutes"
+                    type="number"
+                    min={1}
+                    max={999}
+                    value={customMinutesInput}
+                    onChange={(event) => {
+                      const raw = event.target.value
+                      setCustomMinutesInput(raw)
+                      if (!raw.trim()) {
+                        return
+                      }
+
+                      const parsed = Number.parseInt(raw, 10)
+                      if (!Number.isFinite(parsed)) {
+                        return
+                      }
+
+                      setConfig((previous) => ({
+                        ...previous,
+                        customTimeLimitMinutes: clampInt(parsed, 1, 999),
+                      }))
+                    }}
+                    onBlur={() => {
+                      if (!customMinutesInput.trim()) {
+                        setCustomMinutesInput(String(config.customTimeLimitMinutes))
+                      }
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="setting-group">
+            <h3>Question Flow</h3>
+            <div className="option-grid two-col">
+              {advanceModeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={
+                    config.advanceMode === option.value
+                      ? 'option-card active'
+                      : 'option-card'
+                  }
+                  onClick={() =>
+                    setConfig((previous) => ({
+                      ...previous,
+                      advanceMode: option.value,
+                    }))
+                  }
+                >
+                  <span className="title">{option.label}</span>
+                  <span className="description">{option.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="setup-footer">
             <div className="setup-footer-meta">
               <p>
@@ -2337,6 +2643,21 @@ function App() {
               <p>
                 Hero relationship dataset: {HERO_RELATIONSHIP_DATASET_META.items} links from{' '}
                 {HERO_RELATIONSHIP_DATASET_META.source}.
+              </p>
+              <p>
+                Flow: {getModeLabel(advanceModeOptions, config.advanceMode)}.
+                {config.scoringStyle === 'custom-session' && (
+                  <>
+                    {' '}
+                    Limit:{' '}
+                    {config.customLimitType === 'questions'
+                      ? `${config.customQuestionCount} questions`
+                      : config.customLimitType === 'time'
+                        ? `${config.customTimeLimitMinutes} minutes`
+                        : 'Unlimited'}
+                    .
+                  </>
+                )}
               </p>
             </div>
             <button className="primary-button" onClick={startGame}>
@@ -2371,6 +2692,7 @@ function App() {
               <span>{getModeLabel(skinSourceOptions, game.config.skinSource)}</span>
             )}
             <span>{getModeLabel(answerModeOptions, game.config.answerMode)}</span>
+            <span>{getModeLabel(advanceModeOptions, game.config.advanceMode)}</span>
             <span>{getModeLabel(scoringOptions, game.config.scoringStyle)}</span>
           </div>
 
@@ -2551,18 +2873,29 @@ function App() {
                       ? relationshipHeroImageByName.get(option)
                       : null
 
+                  const isCorrectOption =
+                    answerReveal && option === answerReveal.correctAnswer
+                  const isWrongSelectedOption =
+                    answerReveal &&
+                    !answerReveal.isCorrect &&
+                    answerReveal.selectedAnswer === option
+
                   return (
                     <button
                       key={option}
                       type="button"
-                      className={
+                      className={[
                         game.config.target === 'hero-identity' ||
                         game.config.target === 'hero-relationship'
                           ? 'option-card option-card-hero-identity'
-                          : 'option-card'
-                      }
+                          : 'option-card',
+                        isCorrectOption ? 'option-answer-correct' : '',
+                        isWrongSelectedOption ? 'option-answer-wrong' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
                       disabled={Boolean(feedback)}
-                      onClick={() => submitAnswer(option)}
+                      onClick={() => submitAnswer(option, option)}
                     >
                       {identityRecord?.imageUrl && (
                         <img
@@ -2603,6 +2936,14 @@ function App() {
               >
                 {feedback}
               </p>
+            )}
+
+            {awaitingNext && (
+              <div className="manual-next-row">
+                <button type="button" className="primary-button" onClick={advanceToNextQuestion}>
+                  Next Question
+                </button>
+              </div>
             )}
           </article>
 

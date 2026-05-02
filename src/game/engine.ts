@@ -318,7 +318,10 @@ export function shouldEndAfterAnswer(
 }
 
 export function initialTimeLimitMs(style: ScoringStyle): number | null {
-  return style === 'sudden-death' ? null : 5 * 60 * 1000
+  if (style === 'sudden-death' || style === 'custom-session') {
+    return null
+  }
+  return 5 * 60 * 1000
 }
 
 export function formatTimeRemaining(ms: number): string {

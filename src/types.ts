@@ -7,17 +7,24 @@ export type GuessTarget =
 export type SkinDataSource = 'official' | 'qing-en' | 'hybrid'
 
 export type AnswerMode = 'typed' | 'multiple-choice'
+export type AdvanceMode = 'auto' | 'manual'
+export type CustomSessionLimitType = 'none' | 'questions' | 'time'
 
 export type ScoringStyle =
   | 'five-minute-easy'
   | 'five-minute-hard'
   | 'sudden-death'
+  | 'custom-session'
 
 export interface GameConfig {
   target: GuessTarget
   skinSource: SkinDataSource
   answerMode: AnswerMode
+  advanceMode: AdvanceMode
   scoringStyle: ScoringStyle
+  customLimitType: CustomSessionLimitType
+  customQuestionCount: number
+  customTimeLimitMinutes: number
 }
 
 export interface SkinRecord {
